@@ -300,16 +300,38 @@ def cancel_booking(
     }
 
 
-@app.get("/api/flights/search")
-def search_flights(origin: str, destination: str, date: str, db: Session = Depends(get_db)):
-    search_date = datetime.strptime(date, "%Y-%m-%d").date()
+@app.get("/api/flights/airports")
+def get_unique_airports(db: Session = Depends(get_db)):
+    """Returns a unique list of all origins and destinations currently in the database for autocomplete."""
+    origins = db.query(Flight.origin).distinct().all()
+    destinations = db.query(Flight.destination).distinct().all()
+    
+    # Flatten the tuples into a single unique set of strings
+    airport_set = set([o[0] for o in origins] + [d[0] for d in destinations])
+    return sorted(list(airport_set))
 
-    flights = db.query(Flight).filter(
-        Flight.origin.ilike(f"%{origin}%"),
-        Flight.destination.ilike(f"%{destination}%"),
-        cast(Flight.departure_time, Date) == search_date,
-        Flight.seats_available > 0
-    ).all()
+
+@app.get("/api/flights/search")
+def search_flights(origin: str = None, destination: str = None, date: str = None, db: Session = Depends(get_db)):
+    """
+    Returns a filtered list of flights. 
+    If no parameters are provided, it defaults to returning all available flights.
+    """
+    query = db.query(Flight).filter(Flight.seats_available > 0)
+
+    if origin:
+        query = query.filter(Flight.origin.ilike(f"%{origin}%"))
+    if destination:
+        query = query.filter(Flight.destination.ilike(f"%{destination}%"))
+    if date:
+        try:
+            search_date = datetime.strptime(date, "%Y-%m-%d").date()
+            query = query.filter(cast(Flight.departure_time, Date) == search_date)
+        except ValueError:
+            raise HTTPException(400, "Invalid date format. Use YYYY-MM-DD.")
+
+    # Sort results chronologically by departure time
+    flights = query.order_by(Flight.departure_time.asc()).all()
 
     results = []
     for f in flights:

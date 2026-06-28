@@ -345,7 +345,7 @@ async function logout() {
   window.location.href = "login.html";
 }
 
-/* ---- Flight Search / UI cards -------------------------------------------- */
+/* ---- Flight Search / Live Filter View ------------------------------------ */
 function wireFlightSearch() {
   const searchNav = document.getElementById("searchFlightsNav");
   const searchSection = document.getElementById("searchSection");
@@ -353,70 +353,104 @@ function wireFlightSearch() {
   const resultsContainer = document.getElementById("searchResults");
   const searchAlert = document.getElementById("searchAlert");
   const bookingsSection = document.getElementById("bookingsSection");
+  const airportDatalist = document.getElementById("airportOptions");
 
   if (!searchSection || !form) return;
 
+  // Master function to execute search queries and render cards
+  async function fetchAndRenderFlights(origin = "", dest = "", date = "") {
+    clearAlert(searchAlert);
+    resultsContainer.innerHTML = '<div class="empty-state" style="text-align:center;">Analyzing route updates...</div>';
+
+    try {
+      const params = new URLSearchParams();
+      if (origin) params.append("origin", origin);
+      if (dest) params.append("destination", dest);
+      if (date) params.append("date", date);
+
+      const res = await fetch(`/api/flights/search?${params.toString()}`);
+      const flights = await res.json();
+
+      if (!res.ok) throw new Error(flights.detail || "Could not complete flight lookup.");
+
+      resultsContainer.innerHTML = "";
+      
+      if (flights.length === 0) {
+        showAlert(searchAlert, "No scheduled paths match your chosen parameters.", "error");
+        return;
+      }
+
+      flights.forEach(flight => {
+        const card = document.createElement("div");
+        card.className = "flight-card";
+        
+        const depDate = new Date(flight.departure_time);
+        const timeStr = depDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = depDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+
+        card.innerHTML = `
+          <div class="flight-info">
+            <h4>${flight.airline} · <span style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--steel);">${flight.flight_number}</span></h4>
+            <p class="flight-route"><strong>${flight.origin}</strong> to <strong>${flight.destination}</strong></p>
+            <div class="flight-meta">
+              <span>📅 ${dateStr}</span>
+              <span>🕒 Departs: ${timeStr}</span>
+              <span>⏳ ${flight.duration}</span>
+              <span>💺 ${flight.seats} Seats left</span>
+            </div>
+          </div>
+          <div class="flight-action">
+            <span class="flight-price">$${flight.price.toFixed(2)}</span>
+            <button class="btn btn-primary btn-small" onclick="selectFlight(${flight.id})">Select</button>
+          </div>
+        `;
+        resultsContainer.appendChild(card);
+      });
+    } catch (err) {
+      resultsContainer.innerHTML = "";
+      showAlert(searchAlert, err.message, "error");
+    }
+  }
+
+  // Populate drop-down autocompletes using distinct values found dynamically in the DB
+  async function syncDropdownAutocompletes() {
+    try {
+      const res = await fetch("/api/flights/airports");
+      if (res.ok) {
+        const airports = await res.json();
+        airportDatalist.innerHTML = "";
+        airports.forEach(airport => {
+          const option = document.createElement("option");
+          option.value = airport;
+          airportDatalist.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error("Autofill metadata tracking failed:", err);
+    }
+  }
+
+  // Handle nav tab interactions
   searchNav.addEventListener("click", (e) => {
     e.preventDefault();
     bookingsSection.hidden = true;
     searchSection.hidden = false;
+    
+    // Synchronize auto-suggestions and load a standard complete list first
+    syncDropdownAutocompletes();
+    fetchAndRenderFlights();
+    
     searchSection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
+  // Handle filter/search submissions
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    clearAlert(searchAlert);
-    resultsContainer.innerHTML = "";
-    
     const origin = document.getElementById("searchOrigin").value;
     const dest = document.getElementById("searchDest").value;
     const date = document.getElementById("searchDate").value;
-    const btn = form.querySelector('button[type="submit"]');
-
-    btn.disabled = true;
-    btn.textContent = "Searching...";
-
-    try {
-      const query = new URLSearchParams({ origin, destination: dest, date }).toString();
-      const res = await fetch(`/api/flights/search?${query}`, { method: "GET" });
-      const flights = await res.json();
-
-      if (!res.ok) throw new Error(flights.detail || "Search failed.");
-
-      if (flights.length === 0) {
-        showAlert(searchAlert, "No flights found matching your criteria.", "error");
-      } else {
-        flights.forEach(flight => {
-          const card = document.createElement("div");
-          card.className = "flight-card";
-          
-          const departureDate = new Date(flight.departure_time);
-          const timeString = departureDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-          card.innerHTML = `
-            <div class="flight-info">
-              <h4>${flight.airline} · ${flight.flight_number}</h4>
-              <p class="flight-route">${flight.origin} to ${flight.destination}</p>
-              <div class="flight-meta">
-                <span>Departs: ${timeString}</span>
-                <span>Duration: ${flight.duration}</span>
-                <span>Seats: ${flight.seats}</span>
-              </div>
-            </div>
-            <div class="flight-action">
-              <span class="flight-price">$${flight.price.toFixed(2)}</span>
-              <button class="btn btn-primary btn-small" onclick="selectFlight(${flight.id})">Select</button>
-            </div>
-          `;
-          resultsContainer.appendChild(card);
-        });
-      }
-    } catch (err) {
-      showAlert(searchAlert, err.message, "error");
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Search";
-    }
+    
+    await fetchAndRenderFlights(origin, dest, date);
   });
 }
 

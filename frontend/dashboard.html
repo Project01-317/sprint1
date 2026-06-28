@@ -73,7 +73,7 @@
       <div class="section-head">
         <div>
           <h2>Search Flights</h2>
-          <p>Find available travel options that match your schedule.</p>
+          <p>Browse all available options or refine your schedule below.</p>
         </div>
       </div>
 
@@ -81,21 +81,23 @@
         <form id="flightSearchForm" class="search-grid">
           <div class="field">
             <label for="searchOrigin">From</label>
-            <input id="searchOrigin" type="text" placeholder="City or Airport" required />
+            <input id="searchOrigin" type="text" placeholder="City or Airport" list="airportOptions" />
           </div>
           <div class="field">
             <label for="searchDest">To</label>
-            <input id="searchDest" type="text" placeholder="City or Airport" required />
+            <input id="searchDest" type="text" placeholder="City or Airport" list="airportOptions" />
           </div>
           <div class="field">
             <label for="searchDate">Date</label>
-            <input id="searchDate" type="date" required />
+            <input id="searchDate" type="date" />
           </div>
           <div class="field search-btn-container">
-            <button type="submit" class="btn btn-primary bubbly-btn">Search</button>
+            <button type="submit" class="btn btn-primary bubbly-btn">Filter Results</button>
           </div>
         </form>
       </div>
+
+      <datalist id="airportOptions"></datalist>
 
       <div id="searchAlert" class="alert"></div>
       <div id="searchResults" class="results-container"></div>
