@@ -1,0 +1,426 @@
+/* ==========================================================================
+   Group 15 — Airline Flight Reservation System
+   Auth module (ACC-01) stylesheet
+
+   One sheet, two themes. Colours are declared as CSS custom properties and
+   swapped by the [data-theme] attribute on <html>, so every screen renders
+   in both light and dark from identical markup.
+
+   Base palette (from the team's brief):
+     navy   #183251   steel #597f97   pale #c4cbd8
+     slate  #6c747c   warmgrey #c8c4c4
+   A couple of derived shades are added for text contrast (accessibility).
+   ========================================================================== */
+
+:root {
+  --navy: #183251;
+  --steel: #597f97;
+  --pale: #c4cbd8;
+  --slate: #6c747c;
+  --warmgrey: #c8c4c4;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --font-display: "Spline Sans", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+  --shadow: 0 18px 50px -28px rgba(24, 50, 81, 0.55);
+  --transition: 160ms ease;
+}
+
+/* ---- Light theme (default) ---------------------------------------------- */
+html[data-theme="light"] {
+  --bg: #eef1f5;
+  --bg-accent: #e3e8ef;
+  --surface: #ffffff;
+  --surface-2: #f4f6f9;
+  --border: #d4dae3;
+  --text: #15263a;
+  --text-muted: #5d6a7a;
+  --primary: var(--navy);
+  --primary-hover: #21436b;
+  --accent: var(--steel);
+  --accent-soft: #e7eef3;
+  --header-bg: var(--navy);
+  --header-text: #ffffff;
+  --field-bg: #ffffff;
+  --danger: #b23a48;
+  --danger-soft: #fbeaec;
+  --success: #2f6f57;
+  --success-soft: #e8f3ee;
+}
+
+/* ---- Dark theme ---------------------------------------------------------- */
+html[data-theme="dark"] {
+  --bg: #0f2138;
+  --bg-accent: #13294320;
+  --surface: #1c3a5c;
+  --surface-2: #16314e;
+  --border: #2c4d72;
+  --text: #e7edf4;
+  --text-muted: #9fb2c6;
+  --primary: var(--steel);
+  --primary-hover: #6a90a8;
+  --accent: var(--pale);
+  --accent-soft: #1f436b;
+  --header-bg: #0c1c30;
+  --header-text: #eaf0f6;
+  --field-bg: #14304d;
+  --danger: #e98b96;
+  --danger-soft: #3a1f24;
+  --success: #8fcdb1;
+  --success-soft: #16332a;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ==========================================================================
+   Auth screens (login / signup / profile) — centered card on a runway-lit bg
+   ========================================================================== */
+.auth-stage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+  background:
+    radial-gradient(900px 500px at 100% -10%, var(--bg-accent), transparent 60%),
+    radial-gradient(700px 600px at -10% 110%, var(--bg-accent), transparent 55%),
+    var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 430px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.card.wide { max-width: 640px; }
+
+/* Signature element: a "departure board" strip at the top of every card.
+   The monospace flight code + status reads as an airline artifact, not chrome. */
+.board {
+  background: var(--header-bg);
+  color: var(--header-text);
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.card-body { padding: 30px 30px 34px; }
+
+.headline {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.85rem;
+  letter-spacing: -0.01em;
+  margin: 2px 0 4px;
+  color: var(--text);
+}
+.subhead { color: var(--text-muted); margin: 0 0 22px; font-size: 0.92rem; }
+
+/* ---- Form fields -------------------------------------------------------- */
+.field { margin-bottom: 16px; }
+.field label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+.field input,
+.field select {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text);
+  background: var(--field-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.field input::placeholder { color: var(--text-muted); opacity: 0.7; }
+.field input:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+@media (max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } }
+
+/* ---- Buttons ------------------------------------------------------------ */
+.btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition), transform var(--transition);
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--primary); color: #fff; width: 100%; }
+html[data-theme="dark"] .btn-primary { color: var(--navy); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 84%, #111); }
+html[data-theme="dark"] .btn-danger { color: #1d0f13; }
+.btn-small { padding: 8px 12px; font-size: 0.82rem; border-radius: 8px; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+.btn-row { display: flex; gap: 12px; margin-top: 6px; }
+.btn-row .btn { flex: 1; }
+
+.link {
+  display: inline-block;
+  margin: 4px 0 18px;
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.link:hover { text-decoration: underline; }
+
+/* ---- Inline messages (errors / success) — direction, not decoration ----- */
+.alert {
+  display: none;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  margin-bottom: 18px;
+  border: 1px solid transparent;
+}
+.alert.show { display: block; }
+.alert.error { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.alert.success { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+
+/* ---- Theme toggle (floating) -------------------------------------------- */
+.theme-toggle {
+  position: fixed;
+  top: 18px; right: 18px;
+  z-index: 20;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 13px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.theme-toggle:hover { color: var(--text); }
+
+/* ==========================================================================
+   Dashboard shell (landing target after login) — shared team nav
+   ========================================================================== */
+.app-nav {
+  background: var(--header-bg);
+  color: var(--header-text);
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 26px;
+  height: 58px;
+}
+.app-nav .brand {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: flex; align-items: center; gap: 9px;
+}
+.app-nav a {
+  color: color-mix(in srgb, var(--header-text) 78%, transparent);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.app-nav a.active, .app-nav a:hover { color: var(--header-text); }
+.app-nav .spacer { flex: 1; }
+.app-nav .user { font-size: 0.88rem; display: flex; align-items: center; gap: 14px; }
+.app-nav .user .logout { color: var(--steel); cursor: pointer; font-weight: 600; }
+
+.dash-body { padding: 40px 26px; max-width: 1000px; margin: 0 auto; }
+.welcome {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.welcome-sub { color: var(--text-muted); margin: 0 0 28px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+.tile h3 { margin: 0 0 6px; font-family: var(--font-display); font-size: 1.05rem; }
+.tile p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+.tile .tag {
+  display: inline-block; margin-top: 14px; font-family: var(--font-mono);
+  font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--border); padding: 3px 8px; border-radius: 6px;
+}
+.booking-tile { cursor: pointer; transition: border-color var(--transition), transform var(--transition); }
+.booking-tile:hover,
+.booking-tile:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.bookings-section { margin-top: 34px; }
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.section-head h2 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+.section-head p { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+
+.booking-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.booking-tab {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  padding: 9px 13px;
+}
+.booking-tab.active,
+.booking-tab:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.booking-panel { min-height: 96px; }
+.booking-table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.bookings-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+.bookings-table th,
+.bookings-table td {
+  padding: 13px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+  vertical-align: middle;
+}
+.bookings-table th {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bookings-table tbody tr:last-child td { border-bottom: none; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.status-pill.confirmed { background: var(--success-soft); color: var(--success); }
+.status-pill.cancelled { background: var(--danger-soft); color: var(--danger); }
+.verification-code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+.empty-state {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  padding: 22px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 18, 32, 0.58);
+}
+.modal {
+  width: min(100%, 430px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+.modal h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+.modal-copy {
+  margin: 0 0 18px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.plane { width: 18px; height: 18px; fill: currentColor; }

@@ -1,0 +1,36 @@
+# ---- Python ----
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Local database (auto-created on first run) ----
+*.db
+*.sqlite3
+airline.db
+test_airline.db
+
+# ---- Secrets / environment ----
+.env
+*.env
+
+# ---- Test/scratch artifacts ----
+cj.txt          
+
+# ---- Editors / IDEs ----
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- OS files ----
+.DS_Store
+Thumbs.db
+desktop.ini
