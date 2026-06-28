@@ -18,7 +18,7 @@
       <svg class="plane" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
     </span>
     <a href="dashboard.html" class="active">Dashboard</a>
-    <a href="#">Search Flights</a>
+    <a href="#" id="searchFlightsNav">Search Flights</a>
     <a href="#bookings" id="myBookingsNav">My Bookings</a>
     <a href="#">Settings</a>
     <span class="spacer"></span>
@@ -67,6 +67,38 @@
 
       <div id="ongoingBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="ongoingBookingsTab"></div>
       <div id="cancelledBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="cancelledBookingsTab" hidden></div>
+    </section>
+
+    <section class="search-section" id="searchSection" hidden>
+      <div class="section-head">
+        <div>
+          <h2>Search Flights</h2>
+          <p>Find available travel options that match your schedule.</p>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <form id="flightSearchForm" class="search-grid">
+          <div class="field">
+            <label for="searchOrigin">From</label>
+            <input id="searchOrigin" type="text" placeholder="City or Airport" required />
+          </div>
+          <div class="field">
+            <label for="searchDest">To</label>
+            <input id="searchDest" type="text" placeholder="City or Airport" required />
+          </div>
+          <div class="field">
+            <label for="searchDate">Date</label>
+            <input id="searchDate" type="date" required />
+          </div>
+          <div class="field search-btn-container">
+            <button type="submit" class="btn btn-primary bubbly-btn">Search</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="searchAlert" class="alert"></div>
+      <div id="searchResults" class="results-container"></div>
     </section>
   </main>
 

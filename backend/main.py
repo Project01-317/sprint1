@@ -22,11 +22,12 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import hash_password, verify_password
-from .database import User, UserProfile, get_db, init_db
+from .database import Flight, User, UserProfile, get_db, init_db
 
 # Load variables from a local .env file (gitignored) into the environment.
 load_dotenv()
@@ -297,6 +298,37 @@ def cancel_booking(
         "booking": booking,
         "verification_code": verification_code,
     }
+
+
+@app.get("/api/flights/search")
+def search_flights(origin: str, destination: str, date: str, db: Session = Depends(get_db)):
+    search_date = datetime.strptime(date, "%Y-%m-%d").date()
+
+    flights = db.query(Flight).filter(
+        Flight.origin.ilike(f"%{origin}%"),
+        Flight.destination.ilike(f"%{destination}%"),
+        cast(Flight.departure_time, Date) == search_date,
+        Flight.seats_available > 0
+    ).all()
+
+    results = []
+    for f in flights:
+        dur = f.arrival_time - f.departure_time
+        hours = int(dur.total_seconds() // 3600)
+        minutes = int((dur.total_seconds() % 3600) // 60)
+        results.append({
+            "id": f.id,
+            "flight_number": f.flight_number,
+            "airline": f.airline,
+            "origin": f.origin,
+            "destination": f.destination,
+            "departure_time": f.departure_time.isoformat(),
+            "arrival_time": f.arrival_time.isoformat(),
+            "price": f.price,
+            "duration": f"{hours}h {minutes}m",
+            "seats": f.seats_available
+        })
+    return results
 
 
 # --------------------------------------------------------------------------

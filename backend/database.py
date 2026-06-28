@@ -15,7 +15,7 @@ for later sprints (bookings, payments).
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, ForeignKey, create_engine
+    Column, Integer, String, DateTime, ForeignKey, Float, create_engine
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 

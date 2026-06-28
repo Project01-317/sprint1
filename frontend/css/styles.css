@@ -424,3 +424,83 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
 }
 
 .plane { width: 18px; height: 18px; fill: currentColor; }
+
+.glass-panel {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--pale) 40%, transparent);
+  border-radius: 24px;
+  padding: 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 40px -12px rgba(24, 50, 81, 0.15);
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: 16px;
+  align-items: end;
+}
+
+.bubbly-btn {
+  border-radius: 12px;
+  padding: 14px 28px;
+}
+
+@media (max-width: 768px) {
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.flight-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 24px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.flight-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--navy) 30%, transparent);
+}
+
+.flight-info h4 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.flight-route {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0 0 8px;
+}
+
+.flight-meta {
+  display: flex;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--slate);
+}
+
+.flight-action {
+  text-align: right;
+}
+
+.flight-price {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}

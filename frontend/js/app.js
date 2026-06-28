@@ -345,10 +345,90 @@ async function logout() {
   window.location.href = "login.html";
 }
 
+/* ---- Flight Search / UI cards -------------------------------------------- */
+function wireFlightSearch() {
+  const searchNav = document.getElementById("searchFlightsNav");
+  const searchSection = document.getElementById("searchSection");
+  const form = document.getElementById("flightSearchForm");
+  const resultsContainer = document.getElementById("searchResults");
+  const searchAlert = document.getElementById("searchAlert");
+  const bookingsSection = document.getElementById("bookingsSection");
+
+  if (!searchSection || !form) return;
+
+  searchNav.addEventListener("click", (e) => {
+    e.preventDefault();
+    bookingsSection.hidden = true;
+    searchSection.hidden = false;
+    searchSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAlert(searchAlert);
+    resultsContainer.innerHTML = "";
+    
+    const origin = document.getElementById("searchOrigin").value;
+    const dest = document.getElementById("searchDest").value;
+    const date = document.getElementById("searchDate").value;
+    const btn = form.querySelector('button[type="submit"]');
+
+    btn.disabled = true;
+    btn.textContent = "Searching...";
+
+    try {
+      const query = new URLSearchParams({ origin, destination: dest, date }).toString();
+      const res = await fetch(`/api/flights/search?${query}`, { method: "GET" });
+      const flights = await res.json();
+
+      if (!res.ok) throw new Error(flights.detail || "Search failed.");
+
+      if (flights.length === 0) {
+        showAlert(searchAlert, "No flights found matching your criteria.", "error");
+      } else {
+        flights.forEach(flight => {
+          const card = document.createElement("div");
+          card.className = "flight-card";
+          
+          const departureDate = new Date(flight.departure_time);
+          const timeString = departureDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+          card.innerHTML = `
+            <div class="flight-info">
+              <h4>${flight.airline} · ${flight.flight_number}</h4>
+              <p class="flight-route">${flight.origin} to ${flight.destination}</p>
+              <div class="flight-meta">
+                <span>Departs: ${timeString}</span>
+                <span>Duration: ${flight.duration}</span>
+                <span>Seats: ${flight.seats}</span>
+              </div>
+            </div>
+            <div class="flight-action">
+              <span class="flight-price">$${flight.price.toFixed(2)}</span>
+              <button class="btn btn-primary btn-small" onclick="selectFlight(${flight.id})">Select</button>
+            </div>
+          `;
+          resultsContainer.appendChild(card);
+        });
+      }
+    } catch (err) {
+      showAlert(searchAlert, err.message, "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Search";
+    }
+  });
+}
+
+function selectFlight(flightId) {
+  console.log(`Flight ${flightId} selected.`);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   wireLogin();
   wireSignup();
   wireProfile();
   wireDashboard();
   wireBookings();
+  wireFlightSearch();
 });
