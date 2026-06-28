@@ -60,6 +60,21 @@ class UserProfile(Base):
     user = relationship("User", back_populates="profile")
 
 
+class Flight(Base):
+    """Flight schedules and inventory."""
+    __tablename__ = "flights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    flight_number = Column(String, unique=True, index=True, nullable=False)
+    airline = Column(String, nullable=False)
+    origin = Column(String, nullable=False)
+    destination = Column(String, nullable=False)
+    departure_time = Column(DateTime, nullable=False)
+    arrival_time = Column(DateTime, nullable=False)
+    price = Column(Float, nullable=False)
+    seats_available = Column(Integer, nullable=False)
+
+    
 def init_db() -> None:
     """Create tables if they do not exist (runs on app startup)."""
     Base.metadata.create_all(bind=engine)
