@@ -454,26 +454,22 @@ function wireFlightSearch() {
   });
 }
 
-function selectFlight(flightId) {
-  /* ---- Flight Details / UI-02 ---------------------------------------------- */
+/* ---- Flight Details / UI-02 ---------------------------------------------- */
 async function selectFlight(flightId) {
   const modal = document.getElementById("flightDetailsModal");
   const content = document.getElementById("flightDetailsContent");
   const alert = document.getElementById("flightDetailsAlert");
   
-  // Reset modal state
   content.innerHTML = "Loading flight details...";
   clearAlert(alert);
   modal.hidden = false;
 
   try {
-    // Fetch the specific flight from the new backend endpoint
     const flight = await api(`/api/flights/${flightId}`, undefined, "GET");
     
     const depDate = new Date(flight.departure_time);
     const arrDate = new Date(flight.arrival_time);
     
-    // Render the detailed metadata
     content.innerHTML = `
       <div style="margin-bottom: 1.5rem;">
         <strong style="font-size: 1.2rem;">${flight.airline}</strong> 
@@ -489,7 +485,6 @@ async function selectFlight(flightId) {
       </ul>
     `;
     
-    // Wire up the stub for the next sprint (RES-01 Book Flight)
     document.getElementById("bookFlightBtn").onclick = () => {
       showAlert(alert, "Booking functionality (RES-01) will be implemented in the next sprint.", "success");
     };
@@ -503,7 +498,6 @@ async function selectFlight(flightId) {
 function closeFlightDetailsModal() {
   const modal = document.getElementById("flightDetailsModal");
   if (modal) modal.hidden = true;
-};
 }
 
 document.addEventListener("DOMContentLoaded", () => {
