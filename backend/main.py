@@ -40,28 +40,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Group 15 Airline — Auth Module", lifespan=lifespan)
 
-@app.get("/api/flights/{flight_id}")
-def get_flight_details(flight_id: int, db: Session = Depends(get_db)):
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
-    if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found.")
-    
-    dur = flight.arrival_time - flight.departure_time
-    hours = int(dur.total_seconds() // 3600)
-    minutes = int((dur.total_seconds() % 3600) // 60)
-    
-    return {
-        "id": flight.id,
-        "flight_number": flight.flight_number,
-        "airline": flight.airline,
-        "origin": flight.origin,
-        "destination": flight.destination,
-        "departure_time": flight.departure_time.isoformat(),
-        "arrival_time": flight.arrival_time.isoformat(),
-        "duration": f"{hours}h {minutes}m",
-        "price": flight.price,
-        "seats": flight.seats_available
-    }
 
 # Signed-cookie sessions. The browser only ever sees a tamper-proof signed
 # token, never the raw user id. The signing secret is read from the
@@ -374,6 +352,29 @@ def search_flights(origin: str = None, destination: str = None, date: str = None
             "seats": f.seats_available
         })
     return results
+
+@app.get("/api/flights/{flight_id}")
+def get_flight_details(flight_id: int, db: Session = Depends(get_db)):
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight:
+        raise HTTPException(status_code=404, detail="Flight not found.")
+    
+    dur = flight.arrival_time - flight.departure_time
+    hours = int(dur.total_seconds() // 3600)
+    minutes = int((dur.total_seconds() % 3600) // 60)
+    
+    return {
+        "id": flight.id,
+        "flight_number": flight.flight_number,
+        "airline": flight.airline,
+        "origin": flight.origin,
+        "destination": flight.destination,
+        "departure_time": flight.departure_time.isoformat(),
+        "arrival_time": flight.arrival_time.isoformat(),
+        "duration": f"{hours}h {minutes}m",
+        "price": flight.price,
+        "seats": flight.seats_available
+    }
 
 
 # --------------------------------------------------------------------------
