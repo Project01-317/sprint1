@@ -104,6 +104,19 @@
     </section>
   </main>
 
+  <div class="modal-backdrop" id="flightDetailsModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="flightDetailsTitle">
+      <h2 id="flightDetailsTitle">Flight Details</h2>
+      <div id="flightDetailsContent" class="modal-copy">
+        </div>
+      <div id="flightDetailsAlert" class="alert"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeFlightDetailsModal()" type="button">Close</button>
+        <button class="btn btn-primary" id="bookFlightBtn" type="button">Continue to Booking</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-backdrop" id="cancelBookingModal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cancelModalTitle">
       <h2 id="cancelModalTitle">Cancel booking</h2>

@@ -455,7 +455,55 @@ function wireFlightSearch() {
 }
 
 function selectFlight(flightId) {
-  console.log(`Flight ${flightId} selected.`);
+  /* ---- Flight Details / UI-02 ---------------------------------------------- */
+async function selectFlight(flightId) {
+  const modal = document.getElementById("flightDetailsModal");
+  const content = document.getElementById("flightDetailsContent");
+  const alert = document.getElementById("flightDetailsAlert");
+  
+  // Reset modal state
+  content.innerHTML = "Loading flight details...";
+  clearAlert(alert);
+  modal.hidden = false;
+
+  try {
+    // Fetch the specific flight from the new backend endpoint
+    const flight = await api(`/api/flights/${flightId}`, undefined, "GET");
+    
+    const depDate = new Date(flight.departure_time);
+    const arrDate = new Date(flight.arrival_time);
+    
+    // Render the detailed metadata
+    content.innerHTML = `
+      <div style="margin-bottom: 1.5rem;">
+        <strong style="font-size: 1.2rem;">${flight.airline}</strong> 
+        <span style="color: var(--steel); margin-left: 8px;">Flight ${flight.flight_number}</span>
+      </div>
+      <ul style="list-style: none; padding: 0; line-height: 2;">
+        <li><strong>Route:</strong> ${flight.origin} ➔ ${flight.destination}</li>
+        <li><strong>Departure:</strong> ${depDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</li>
+        <li><strong>Arrival:</strong> ${arrDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</li>
+        <li><strong>Total Duration:</strong> ${flight.duration}</li>
+        <li><strong>Inventory:</strong> ${flight.seats} seats available</li>
+        <li><strong>Current Price:</strong> $${flight.price.toFixed(2)} CAD</li>
+      </ul>
+    `;
+    
+    // Wire up the stub for the next sprint (RES-01 Book Flight)
+    document.getElementById("bookFlightBtn").onclick = () => {
+      showAlert(alert, "Booking functionality (RES-01) will be implemented in the next sprint.", "success");
+    };
+
+  } catch (err) {
+    content.innerHTML = "";
+    showAlert(alert, err.message, "error");
+  }
+}
+
+function closeFlightDetailsModal() {
+  const modal = document.getElementById("flightDetailsModal");
+  if (modal) modal.hidden = true;
+};
 }
 
 document.addEventListener("DOMContentLoaded", () => {
