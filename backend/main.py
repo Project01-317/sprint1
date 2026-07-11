@@ -13,21 +13,25 @@ whole prototype starts with a single command.
 
 import os
 import re
+import secrets
+import string
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import cast, Date
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import aircraft
 from .auth import hash_password, verify_password
-from .database import Flight, User, UserProfile, get_db, init_db
+from .database import Flight, Reservation, User, UserProfile, get_db, init_db
 
 # Load variables from a local .env file (gitignored) into the environment.
 load_dotenv()
@@ -82,50 +86,18 @@ class CancelBookingRequest(BaseModel):
     account_email: str
 
 
-dummy_booking_templates = [
-    {
-        "id": 1,
-        "passenger_name": "Ahmed",
-        "flight_number": "AC101",
-        "origin": "Toronto",
-        "destination": "New York",
-        "departure_date": "2026-06-30",
-        "status": "CONFIRMED",
-        "cancellation_timestamp": None,
-        "verification_code": None,
-    },
-    {
-        "id": 2,
-        "passenger_name": "Ahmed",
-        "flight_number": "AC202",
-        "origin": "Toronto",
-        "destination": "London",
-        "departure_date": "2026-07-05",
-        "status": "CONFIRMED",
-        "cancellation_timestamp": None,
-        "verification_code": None,
-    },
-    {
-        "id": 3,
-        "passenger_name": "Ahmed",
-        "flight_number": "EK303",
-        "origin": "Toronto",
-        "destination": "Dubai",
-        "departure_date": "2026-07-15",
-        "status": "CANCELLED",
-        "cancellation_timestamp": "2026-06-20T14:30:00+00:00",
-        "verification_code": "CANCEL-BOOKING-3",
-    },
-]
-
-dummy_bookings_by_email = {}
+class BookingRequest(BaseModel):
+    flight_id: int
+    seat: Optional[str] = None
+    special_accommodations: Optional[str] = None
 
 
 def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def current_user_email(request: Request, db: Session) -> str:
+def current_user(request: Request, db: Session) -> User:
+    """Resolve the logged-in User from the session, or raise 401."""
     user_id = request.session.get("user_id")
     if user_id is None:
         raise HTTPException(401, "Please log in first.")
@@ -135,21 +107,64 @@ def current_user_email(request: Request, db: Session) -> str:
         request.session.clear()
         raise HTTPException(401, "Please log in first.")
 
-    return normalize_email(user.email)
+    return user
 
 
-def bookings_for_user(email: str):
-    email = normalize_email(email)
-    if email not in dummy_bookings_by_email:
-        dummy_bookings_by_email[email] = [
-            {**booking, "account_email": email}
-            for booking in dummy_booking_templates
-        ]
-    return dummy_bookings_by_email[email]
+def current_user_email(request: Request, db: Session) -> str:
+    return normalize_email(current_user(request, db).email)
 
 
-def find_dummy_booking(bookings, booking_id: int):
-    return next((booking for booking in bookings if booking["id"] == booking_id), None)
+def require_admin(request: Request, db: Session = Depends(get_db)) -> User:
+    """FastAPI dependency: only allow requests from an admin account."""
+    user_id = request.session.get("user_id")
+    if not user_id:
+        raise HTTPException(401, "Please log in first.")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or user.role != "admin":
+        raise HTTPException(403, "Admin access required.")
+    return user
+
+
+def generate_booking_reference() -> str:
+    """Six-char confirmation code from A–Z and 0–9 (e.g. 'ABCD12')."""
+    return "".join(
+        secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6)
+    )
+
+
+def reservation_to_booking(res: Reservation) -> dict:
+    """
+    Map a Reservation row (+ joined flight/user) to the JSON shape the existing
+    cancel/booking UI already consumes. The storage changed; the contract did
+    not — the frontend keeps reading id/status/verification_code as before.
+    """
+    flight = res.flight
+    user = res.user
+    profile = user.profile if user else None
+    if profile:
+        passenger_name = f"{profile.first_name} {profile.last_name}".strip()
+    elif user:
+        passenger_name = user.email.split("@")[0]
+    else:
+        passenger_name = "-"
+
+    return {
+        "id": res.id,
+        "passenger_name": passenger_name,
+        "flight_number": flight.flight_number if flight else "-",
+        "origin": flight.origin if flight else "-",
+        "destination": flight.destination if flight else "-",
+        "departure_date": flight.departure_time.date().isoformat() if flight else None,
+        "status": res.status,
+        "cancellation_timestamp": res.cancelled_at.isoformat() if res.cancelled_at else None,
+        "verification_code": f"CANCEL-BOOKING-{res.id}" if res.status == "CANCELLED" else None,
+        "account_email": normalize_email(user.email) if user else None,
+        "seat": res.seat,
+        "seat_class": aircraft.seat_class(flight.aircraft_type, res.seat)
+        if (flight and res.seat) else None,
+        "booking_reference": res.booking_reference,
+        "special_accommodations": res.special_accommodations,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -236,6 +251,7 @@ def me(request: Request, db: Session = Depends(get_db)):
     return {
         "logged_in": True,
         "email": user.email,
+        "role": user.role,
         "has_profile": user.profile is not None,
         "first_name": user.profile.first_name if user.profile else None,
     }
@@ -247,22 +263,92 @@ def logout(request: Request):
     return {"message": "Logged out."}
 
 
+def _user_reservations(db: Session, user_id: int, status: Optional[str] = None):
+    """All of a user's reservations (optionally filtered by status), newest first."""
+    query = db.query(Reservation).filter(Reservation.user_id == user_id)
+    if status is not None:
+        query = query.filter(Reservation.status == status)
+    return query.order_by(Reservation.created_at.desc()).all()
+
+
+@app.post("/api/bookings")
+def create_booking(
+    req: BookingRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """RES-01: the real booking path. Writes a reservation for a real flight."""
+    user = current_user(request, db)
+
+    flight = db.query(Flight).filter(Flight.id == req.flight_id).first()
+    if flight is None:
+        raise HTTPException(404, "Flight not found.")
+    if flight.seats_available <= 0:
+        raise HTTPException(409, "Flight is full.")
+
+    seat = req.seat.strip().upper() if req.seat else None
+    if seat:
+        if aircraft.seat_class(flight.aircraft_type, seat) is None:
+            raise HTTPException(400, "That is not a valid seat for this aircraft.")
+        taken = (
+            db.query(Reservation)
+            .filter(
+                Reservation.flight_id == flight.id,
+                Reservation.seat == seat,
+                Reservation.status == "CONFIRMED",
+            )
+            .first()
+        )
+        if taken:
+            raise HTTPException(409, "Seat already taken.")
+
+    # Generate a unique booking reference, regenerating on the rare collision.
+    reference = generate_booking_reference()
+    while db.query(Reservation).filter(Reservation.booking_reference == reference).first():
+        reference = generate_booking_reference()
+
+    reservation = Reservation(
+        user_id=user.id,
+        flight_id=flight.id,
+        booking_reference=reference,
+        seat=seat,
+        status="CONFIRMED",
+        special_accommodations=(req.special_accommodations or None),
+    )
+    flight.seats_available -= 1
+    db.add(reservation)
+    db.commit()
+    db.refresh(reservation)
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": (
+                f"Booking confirmed. Your reference is {reference}."
+                + (f" Seat {seat}." if seat else "")
+            ),
+            "booking_reference": reference,
+            "booking": reservation_to_booking(reservation),
+        },
+    )
+
+
 @app.get("/api/bookings")
 def get_bookings(request: Request, db: Session = Depends(get_db)):
-    email = current_user_email(request, db)
-    return bookings_for_user(email)
+    user = current_user(request, db)
+    return [reservation_to_booking(r) for r in _user_reservations(db, user.id)]
 
 
 @app.get("/api/bookings/ongoing")
 def get_ongoing_bookings(request: Request, db: Session = Depends(get_db)):
-    email = current_user_email(request, db)
-    return [booking for booking in bookings_for_user(email) if booking["status"] == "CONFIRMED"]
+    user = current_user(request, db)
+    return [reservation_to_booking(r) for r in _user_reservations(db, user.id, "CONFIRMED")]
 
 
 @app.get("/api/bookings/cancelled")
 def get_cancelled_bookings(request: Request, db: Session = Depends(get_db)):
-    email = current_user_email(request, db)
-    return [booking for booking in bookings_for_user(email) if booking["status"] == "CANCELLED"]
+    user = current_user(request, db)
+    return [reservation_to_booking(r) for r in _user_reservations(db, user.id, "CANCELLED")]
 
 
 @app.put("/api/bookings/{booking_id}/cancel")
@@ -272,31 +358,34 @@ def cancel_booking(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    email = current_user_email(request, db)
+    user = current_user(request, db)
+    email = normalize_email(user.email)
     confirmation_email = normalize_email(req.account_email)
-    booking = find_dummy_booking(bookings_for_user(email), booking_id)
-    if booking is None:
-        raise HTTPException(404, "Booking not found.")
-    if booking["status"] == "CANCELLED":
-        raise HTTPException(400, "This booking is already cancelled.")
 
+    reservation = db.query(Reservation).filter(Reservation.id == booking_id).first()
+    if reservation is None or reservation.user_id != user.id:
+        raise HTTPException(404, "Booking not found.")
+    if reservation.status == "CANCELLED":
+        raise HTTPException(400, "This booking is already cancelled.")
     if confirmation_email != email:
         raise HTTPException(403, "Email confirmation does not match your logged-in email.")
-    if normalize_email(booking["account_email"]) != email:
-        raise HTTPException(403, "You can only cancel your own booking.")
 
-    verification_code = f"CANCEL-BOOKING-{booking['id']}"
-    booking["status"] = "CANCELLED"
-    booking["cancellation_timestamp"] = datetime.now(timezone.utc).isoformat()
-    booking["verification_code"] = verification_code
+    verification_code = f"CANCEL-BOOKING-{reservation.id}"
+    reservation.status = "CANCELLED"
+    reservation.cancelled_at = datetime.now(timezone.utc)
+    # Free the seat back into the flight's inventory.
+    if reservation.flight is not None:
+        reservation.flight.seats_available += 1
+    db.commit()
+    db.refresh(reservation)
 
     return {
         "message": (
-            f"Booking #{booking['id']} has been cancelled successfully. "
+            f"Booking #{reservation.id} has been cancelled successfully. "
             f"Verification code: {verification_code}. "
             "A record has been saved under Cancelled Bookings."
         ),
-        "booking": booking,
+        "booking": reservation_to_booking(reservation),
         "verification_code": verification_code,
     }
 
@@ -374,6 +463,132 @@ def get_flight_details(flight_id: int, db: Session = Depends(get_db)):
         "duration": f"{hours}h {minutes}m",
         "price": flight.price,
         "seats": flight.seats_available
+    }
+
+
+# --------------------------------------------------------------------------
+# ADM-02: Passenger list + seat map
+# --------------------------------------------------------------------------
+def _confirmed_reservations(db: Session, flight_id: int):
+    """Every CONFIRMED reservation on a flight, joined to user + profile."""
+    return (
+        db.query(Reservation)
+        .filter(
+            Reservation.flight_id == flight_id,
+            Reservation.status == "CONFIRMED",
+        )
+        .all()
+    )
+
+
+@app.get("/api/flights/{flight_id}/passengers")
+def get_passenger_list(
+    flight_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """ADM-02: the manifest — one entry per CONFIRMED reservation. Admin only."""
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if flight is None:
+        raise HTTPException(404, "Flight not found.")
+
+    reservations = _confirmed_reservations(db, flight_id)
+    passengers = []
+    for res in reservations:
+        user = res.user
+        profile = user.profile if user else None
+        passengers.append({
+            "first_name": profile.first_name if profile else None,
+            "last_name": profile.last_name if profile else None,
+            "email": user.email if user else None,
+            "seat": res.seat,
+            "seat_class": aircraft.seat_class(flight.aircraft_type, res.seat)
+            if res.seat else None,
+            "booking_reference": res.booking_reference,
+            "special_accommodations": res.special_accommodations,
+        })
+
+    capacity = len(aircraft.all_seats(flight.aircraft_type))
+    return {
+        "flight": {
+            "flight_number": flight.flight_number,
+            "origin": flight.origin,
+            "destination": flight.destination,
+            "aircraft_type": flight.aircraft_type,
+            "seats_available": flight.seats_available,
+            "capacity": capacity,
+        },
+        "passengers": passengers,
+        "count": len(passengers),
+    }
+
+
+@app.get("/api/flights/{flight_id}/seatmap")
+def get_seatmap(flight_id: int, request: Request, db: Session = Depends(get_db)):
+    """
+    The aircraft layout plus per-seat occupancy so the frontend can render the
+    cabin. Requires a logged-in session. Passenger identity is only included
+    when the requester is an admin (privacy for the customer booking flow).
+    """
+    user = current_user(request, db)
+    is_admin = user.role == "admin"
+
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if flight is None:
+        raise HTTPException(404, "Flight not found.")
+
+    # Map each occupied seat to its CONFIRMED reservation.
+    occupancy = {
+        res.seat: res
+        for res in _confirmed_reservations(db, flight_id)
+        if res.seat
+    }
+
+    cfg = aircraft.AIRCRAFT_CONFIGS.get(flight.aircraft_type) \
+        or aircraft.AIRCRAFT_CONFIGS["A320"]
+
+    cabins = []
+    for cabin in cfg["cabins"]:
+        rows = []
+        for row_num in cabin["rows"]:
+            seats = []
+            for col in cabin["columns"]:
+                seat_id = f"{row_num}{col}"
+                res = occupancy.get(seat_id)
+                seat_obj = {
+                    "seat": seat_id,
+                    "status": "occupied" if res else "available",
+                }
+                if res and is_admin:
+                    u = res.user
+                    p = u.profile if u else None
+                    name = (
+                        f"{p.first_name} {p.last_name}".strip()
+                        if p else (u.email if u else None)
+                    )
+                    seat_obj["passenger"] = name
+                    seat_obj["booking_reference"] = res.booking_reference
+                    seat_obj["special_accommodations"] = res.special_accommodations
+                seats.append(seat_obj)
+            rows.append({"row": row_num, "seats": seats})
+        cabins.append({
+            "class": cabin["class"],
+            "aisles_after": cabin["aisles_after"],
+            "columns": cabin["columns"],
+            "rows": rows,
+        })
+
+    return {
+        "aircraft_type": flight.aircraft_type,
+        "display_name": cfg["display_name"],
+        "flight": {
+            "flight_number": flight.flight_number,
+            "origin": flight.origin,
+            "destination": flight.destination,
+            "capacity": len(aircraft.all_seats(flight.aircraft_type)),
+            "occupied": len(occupancy),
+        },
+        "cabins": cabins,
     }
 
 

@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timedelta
-from backend.database import SessionLocal, Flight
+from backend.database import SessionLocal, Flight, init_db
+from backend import aircraft
 
 # Pool of realistic data to randomize from
 AIRLINES = [
@@ -15,7 +16,14 @@ CITIES = [
     "London", "Paris", "Dubai", "Tokyo", "Frankfurt"
 ]
 
+AIRCRAFT_TYPES = ["A320", "B787"]
+
+
 def generate_random_flights(num_flights=150):
+    # Create tables first — on a clean checkout there is no airline.db yet, so
+    # inserting before the schema exists used to crash the seed.
+    init_db()
+
     db = SessionLocal()
     flights_to_add = []
     used_flight_numbers = set()
@@ -50,10 +58,14 @@ def generate_random_flights(num_flights=150):
         duration_minutes = random.randint(60, 14 * 60)
         arrival_time = departure_time + timedelta(minutes=duration_minutes)
         
-        # Randomize price ($99.00 to $1299.00) and seats
+        # Randomize price ($99.00 to $1299.00)
         price = round(random.uniform(99.0, 1299.0), 2)
-        seats = random.randint(0, 250) # Sometimes 0 to test "sold out" logic
-        
+
+        # Pick an aircraft type and set seats_available to the config's real
+        # seat count so search/booking inventory matches the seat map.
+        aircraft_type = random.choice(AIRCRAFT_TYPES)
+        seats = len(aircraft.all_seats(aircraft_type))
+
         flight = Flight(
             flight_number=flight_num,
             airline=airline_name,
@@ -62,7 +74,8 @@ def generate_random_flights(num_flights=150):
             departure_time=departure_time,
             arrival_time=arrival_time,
             price=price,
-            seats_available=seats
+            seats_available=seats,
+            aircraft_type=aircraft_type,
         )
         flights_to_add.append(flight)
         
