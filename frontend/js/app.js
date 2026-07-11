@@ -337,6 +337,18 @@ async function wireDashboard() {
     greeting.textContent = `Welcome aboard, ${name}.`;
     const emailEl = document.getElementById("navEmail");
     if (emailEl) emailEl.textContent = data.email;
+
+    // Admins get an extra nav entry for the ADM-02 passenger list.
+    if (data.role === "admin") {
+      const nav = document.querySelector(".app-nav .spacer");
+      if (nav && !document.getElementById("passengerListNav")) {
+        const link = document.createElement("a");
+        link.id = "passengerListNav";
+        link.href = "passengers.html";
+        link.textContent = "Passenger List";
+        nav.parentNode.insertBefore(link, nav);
+      }
+    }
   } catch (_) { /* leave page as-is on transient error */ }
 }
 
@@ -498,6 +510,233 @@ async function selectFlight(flightId) {
 function closeFlightDetailsModal() {
   const modal = document.getElementById("flightDetailsModal");
   if (modal) modal.hidden = true;
+}
+
+/* ---- ADM-02 / RES-01: reusable seat map --------------------------------- */
+/*
+ * Renders a /seatmap payload into `container`. Build once, parameterized:
+ *   adminView  — reveal passenger identity on occupied seats (admin only).
+ *   selectable — allow clicking an available seat (booking flow); calls
+ *                onSelect(seatId) and tracks a single highlighted selection.
+ */
+function renderSeatMap(payload, container, { adminView = false, selectable = false, onSelect = null } = {}) {
+  container.innerHTML = "";
+  let selectedSeat = null;
+
+  payload.cabins.forEach((cabin) => {
+    const section = document.createElement("div");
+    section.className = "cabin";
+
+    const label = document.createElement("h3");
+    label.className = "cabin-label";
+    label.textContent = cabin.class;
+    section.appendChild(label);
+
+    cabin.rows.forEach((row) => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "seat-row";
+
+      const num = document.createElement("span");
+      num.className = "row-number";
+      num.textContent = row.row;
+      rowEl.appendChild(num);
+
+      cabin.columns.forEach((col) => {
+        const seat = row.seats.find((s) => s.seat === `${row.row}${col}`);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `seat-btn ${seat.status}`;
+        btn.textContent = col;
+
+        const occupied = seat.status === "occupied";
+        let aria = `Seat ${seat.seat}, ${seat.status}`;
+
+        if (occupied && adminView && seat.passenger) {
+          aria += `, ${seat.passenger}`;
+          const parts = [seat.passenger, `Ref ${seat.booking_reference || "-"}`];
+          if (seat.special_accommodations) parts.push(`Accommodation: ${seat.special_accommodations}`);
+          const tip = parts.join(" · ");
+          btn.addEventListener("mouseenter", (e) => showSeatTooltip(e, seat));
+          btn.addEventListener("mousemove", moveSeatTooltip);
+          btn.addEventListener("mouseleave", hideSeatTooltip);
+          btn.addEventListener("focus", (e) => showSeatTooltip(e, seat));
+          btn.addEventListener("blur", hideSeatTooltip);
+          if (seat.special_accommodations) {
+            const badge = document.createElement("span");
+            badge.className = "accom-badge";
+            badge.textContent = "♿";
+            btn.appendChild(badge);
+            aria += ", requires accommodation";
+          }
+          btn.title = tip;
+        }
+
+        if (occupied) btn.disabled = true;
+
+        if (selectable && !occupied) {
+          btn.addEventListener("click", () => {
+            container.querySelectorAll(".seat-btn.selected").forEach((b) => {
+              b.classList.remove("selected");
+              b.classList.add("available");
+            });
+            btn.classList.remove("available");
+            btn.classList.add("selected");
+            selectedSeat = seat.seat;
+            if (onSelect) onSelect(seat.seat);
+          });
+        } else if (!occupied) {
+          btn.disabled = true; // admin/manifest view: seats are not clickable
+        }
+
+        btn.setAttribute("aria-label", aria);
+        rowEl.appendChild(btn);
+
+        if (cabin.aisles_after.includes(col)) {
+          const gap = document.createElement("span");
+          gap.className = "aisle-gap";
+          gap.setAttribute("aria-hidden", "true");
+          rowEl.appendChild(gap);
+        }
+      });
+
+      section.appendChild(rowEl);
+    });
+
+    container.appendChild(section);
+  });
+}
+
+let _seatTooltipEl = null;
+function showSeatTooltip(e, seat) {
+  hideSeatTooltip();
+  _seatTooltipEl = document.createElement("div");
+  _seatTooltipEl.className = "seat-tooltip";
+  _seatTooltipEl.innerHTML =
+    `<div><strong>${seat.passenger}</strong></div>` +
+    `<div class="ref">${seat.booking_reference || ""}</div>` +
+    (seat.special_accommodations ? `<div>♿ ${seat.special_accommodations}</div>` : "");
+  document.body.appendChild(_seatTooltipEl);
+  moveSeatTooltip(e);
+}
+function moveSeatTooltip(e) {
+  if (!_seatTooltipEl) return;
+  _seatTooltipEl.style.left = `${e.clientX + 14}px`;
+  _seatTooltipEl.style.top = `${e.clientY + 14}px`;
+}
+function hideSeatTooltip() {
+  if (_seatTooltipEl) { _seatTooltipEl.remove(); _seatTooltipEl = null; }
+}
+
+/* ---- ADM-02: admin passenger-list page ---------------------------------- */
+async function wirePassengerList() {
+  const select = document.getElementById("paxFlightSelect");
+  if (!select) return;
+
+  const alert = document.getElementById("paxAlert");
+  const form = document.getElementById("paxFlightForm");
+  const section = document.getElementById("seatmapSection");
+
+  // Route guard: this page is admin-only.
+  try {
+    const me = await (await fetch("/api/me")).json();
+    if (!me.logged_in) { window.location.href = "login.html"; return; }
+    const emailEl = document.getElementById("navEmail");
+    if (emailEl) emailEl.textContent = me.email;
+    if (me.role !== "admin") {
+      showAlert(alert, "Admin access required. Redirecting to dashboard…", "error");
+      setTimeout(() => (window.location.href = "dashboard.html"), 1500);
+      return;
+    }
+  } catch (_) { window.location.href = "login.html"; return; }
+
+  // Populate the flight dropdown from the search endpoint.
+  try {
+    const flights = await (await fetch("/api/flights/search")).json();
+    flights.forEach((f) => {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = `${f.flight_number} · ${f.origin} → ${f.destination}`;
+      select.appendChild(opt);
+    });
+  } catch (_) {
+    showAlert(alert, "Could not load flights.", "error");
+  }
+
+  // View toggle (seat map vs. accessible table).
+  const mapBtn = document.getElementById("mapViewBtn");
+  const tableBtn = document.getElementById("tableViewBtn");
+  const mapView = document.getElementById("seatmapView");
+  const tableView = document.getElementById("tableView");
+  function setView(mode) {
+    const isMap = mode === "map";
+    mapBtn.classList.toggle("active", isMap);
+    tableBtn.classList.toggle("active", !isMap);
+    mapBtn.setAttribute("aria-pressed", isMap ? "true" : "false");
+    tableBtn.setAttribute("aria-pressed", !isMap ? "true" : "false");
+    mapView.hidden = !isMap;
+    tableView.hidden = isMap;
+  }
+  mapBtn.addEventListener("click", () => setView("map"));
+  tableBtn.addEventListener("click", () => setView("table"));
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const flightId = select.value;
+    if (!flightId) return;
+    clearAlert(alert);
+    try {
+      const [seatmap, manifest] = await Promise.all([
+        api(`/api/flights/${flightId}/seatmap`, undefined, "GET"),
+        api(`/api/flights/${flightId}/passengers`, undefined, "GET"),
+      ]);
+
+      section.hidden = false;
+      document.getElementById("seatmapTitle").textContent =
+        `${manifest.flight.flight_number} — ${seatmap.display_name}`;
+      document.getElementById("seatmapSubtitle").textContent =
+        `${manifest.flight.origin} → ${manifest.flight.destination}`;
+
+      const cap = manifest.flight.capacity;
+      const filled = manifest.count;
+      const load = cap ? Math.round((filled / cap) * 100) : 0;
+      document.getElementById("seatmapSummary").innerHTML =
+        `<span><strong>${filled}</strong> filled</span>` +
+        `<span><strong>${cap}</strong> capacity</span>` +
+        `<span><strong>${load}%</strong> load factor</span>`;
+
+      renderSeatMap(seatmap, mapView, { adminView: true });
+      renderManifestTable(manifest.passengers);
+      setView("map");
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err) {
+      showAlert(alert, err.message, "error");
+    }
+  });
+}
+
+function renderManifestTable(passengers) {
+  const body = document.getElementById("paxTableBody");
+  body.innerHTML = "";
+  if (!passengers.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.className = "empty-state";
+    cell.textContent = "No passengers booked on this flight yet.";
+    row.appendChild(cell);
+    body.appendChild(row);
+    return;
+  }
+  passengers.forEach((p) => {
+    const row = document.createElement("tr");
+    const name = [p.first_name, p.last_name].filter(Boolean).join(" ") || p.email || "-";
+    [p.booking_reference, name, p.seat, p.seat_class, p.special_accommodations].forEach((v) => {
+      const td = document.createElement("td");
+      td.textContent = v || "-";
+      row.appendChild(td);
+    });
+    body.appendChild(row);
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {

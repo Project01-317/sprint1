@@ -504,3 +504,86 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
   color: var(--text);
   margin-bottom: 8px;
 }
+
+/* ==========================================================================
+   ADM-02 — Passenger list seat map (also reused for RES-01 seat selection)
+   ========================================================================== */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.view-toggle { display: flex; gap: 6px; }
+
+.seatmap-summary {
+  display: flex; flex-wrap: wrap; gap: 24px;
+  margin: 12px 0 4px;
+  font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-muted);
+}
+.seatmap-summary strong { color: var(--text); font-size: 1.05rem; }
+
+.seatmap-legend {
+  display: flex; flex-wrap: wrap; gap: 18px;
+  margin: 12px 0 18px; font-size: 0.8rem; color: var(--text-muted);
+}
+.legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.seat-swatch {
+  width: 20px; height: 20px; border-radius: 6px; display: inline-block;
+  border: 1px solid var(--border);
+}
+.seat-swatch.available { background: var(--surface); }
+.seat-swatch.occupied  { background: var(--navy); border-color: var(--navy); }
+.seat-swatch.selected  { background: var(--steel); border-color: var(--steel); }
+.accom-mark { font-size: 1rem; line-height: 1; }
+
+.seatmap-scroll { overflow-x: auto; padding-bottom: 8px; }
+
+.cabin { margin-bottom: 26px; }
+.cabin-label {
+  font-family: var(--font-display); font-weight: 600; font-size: 1.05rem;
+  color: var(--text); margin: 0 0 10px;
+  padding-left: 40px;
+}
+
+.seat-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.row-number {
+  width: 32px; text-align: right; flex: none;
+  font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);
+}
+.aisle-gap { width: 22px; flex: none; }
+
+.seat-btn {
+  width: 40px; height: 40px; flex: none;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+  cursor: pointer; transition: transform var(--transition), background var(--transition);
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+}
+.seat-btn:hover { transform: translateY(-2px); }
+.seat-btn:focus-visible { outline: 3px solid var(--steel); outline-offset: 2px; }
+
+.seat-btn.occupied {
+  background: var(--navy); border-color: var(--navy); color: #fff;
+}
+.seat-btn.selected {
+  background: var(--steel); border-color: var(--steel); color: #fff;
+}
+.seat-btn[disabled] { cursor: not-allowed; }
+.seat-btn.available[disabled]:hover { transform: none; }
+
+.seat-btn .accom-badge {
+  position: absolute; top: -6px; right: -6px;
+  font-size: 0.7rem; line-height: 1;
+  background: var(--surface); border-radius: 50%; padding: 1px;
+}
+
+.seat-tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: var(--navy); color: #fff;
+  padding: 8px 12px; border-radius: 8px; font-size: 0.78rem;
+  box-shadow: var(--shadow); max-width: 240px;
+}
+.seat-tooltip .ref { font-family: var(--font-mono); color: var(--pale); }
