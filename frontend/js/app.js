@@ -511,7 +511,8 @@ async function selectFlight(flightId) {
     `;
     
     document.getElementById("bookFlightBtn").onclick = () => {
-      showAlert(alert, "Booking functionality (RES-01) will be implemented in the next sprint.", "success");
+      closeFlightDetailsModal();
+      openBookingModal(flight);
     };
 
   } catch (err) {
@@ -523,6 +524,114 @@ async function selectFlight(flightId) {
 function closeFlightDetailsModal() {
   const modal = document.getElementById("flightDetailsModal");
   if (modal) modal.hidden = true;
+}
+
+/* ---- RES-01: Book Flight (seat selection -> confirm) --------------------- */
+let bookingFlight = null;
+let bookingSelectedSeat = null;
+
+async function openBookingModal(flight) {
+  bookingFlight = flight;
+  bookingSelectedSeat = null;
+
+  const modal = document.getElementById("bookingModal");
+  if (!modal) return;
+
+  // Reset to the seat-selection step (in case a previous confirmation is shown).
+  document.getElementById("bookingStep").hidden = false;
+  document.getElementById("bookingConfirmation").hidden = true;
+  document.getElementById("bookingModalSummary").textContent =
+    `${flight.airline} ${flight.flight_number} · ${flight.origin} → ${flight.destination} · $${flight.price.toFixed(2)} CAD`;
+  document.getElementById("bookingAccommodations").value = "";
+  document.getElementById("bookingSelectedInfo").textContent = "No seat selected yet.";
+  const confirmBtn = document.getElementById("confirmBookingBtn");
+  confirmBtn.disabled = true;
+  const alert = document.getElementById("bookingModalAlert");
+  clearAlert(alert);
+
+  const mapEl = document.getElementById("bookingSeatMap");
+  mapEl.innerHTML = '<div class="empty-state">Loading seat map…</div>';
+  modal.hidden = false;
+
+  try {
+    const seatmap = await api(`/api/flights/${flight.id}/seatmap`, undefined, "GET");
+    renderSeatMap(seatmap, mapEl, {
+      selectable: true,
+      onSelect: (seatId) => {
+        bookingSelectedSeat = seatId;
+        document.getElementById("bookingSelectedInfo").textContent = `Selected seat: ${seatId}`;
+        confirmBtn.disabled = false;
+      },
+    });
+  } catch (err) {
+    mapEl.innerHTML = "";
+    showAlert(alert, err.message, "error");
+  }
+}
+
+function closeBookingModal() {
+  const modal = document.getElementById("bookingModal");
+  if (modal) modal.hidden = true;
+  bookingFlight = null;
+  bookingSelectedSeat = null;
+}
+
+async function confirmBooking() {
+  if (!bookingFlight || !bookingSelectedSeat) return;
+  const alert = document.getElementById("bookingModalAlert");
+  const confirmBtn = document.getElementById("confirmBookingBtn");
+  const accommodations = document.getElementById("bookingAccommodations").value.trim();
+
+  clearAlert(alert);
+  confirmBtn.disabled = true;
+  try {
+    const data = await api("/api/bookings", {
+      flight_id: bookingFlight.id,
+      seat: bookingSelectedSeat,
+      special_accommodations: accommodations || null,
+    });
+    // Show the confirmation step with the booking reference.
+    document.getElementById("bookingRefCode").textContent = data.booking_reference;
+    document.getElementById("bookingConfirmDetails").textContent =
+      `${bookingFlight.airline} ${bookingFlight.flight_number} · Seat ${bookingSelectedSeat} · ${bookingFlight.origin} → ${bookingFlight.destination}`;
+    document.getElementById("bookingStep").hidden = true;
+    document.getElementById("bookingConfirmation").hidden = false;
+    // Refresh the bookings list so the new reservation appears under My Bookings.
+    bookingsLoaded = false;
+  } catch (err) {
+    showAlert(alert, err.message, "error");
+    confirmBtn.disabled = false;
+    // If the seat was taken between load and confirm, reload the map to reflect it.
+    if (/taken|full/i.test(err.message) && bookingFlight) {
+      const mapEl = document.getElementById("bookingSeatMap");
+      try {
+        const seatmap = await api(`/api/flights/${bookingFlight.id}/seatmap`, undefined, "GET");
+        bookingSelectedSeat = null;
+        document.getElementById("bookingSelectedInfo").textContent = "No seat selected yet.";
+        confirmBtn.disabled = true;
+        renderSeatMap(seatmap, mapEl, {
+          selectable: true,
+          onSelect: (seatId) => {
+            bookingSelectedSeat = seatId;
+            document.getElementById("bookingSelectedInfo").textContent = `Selected seat: ${seatId}`;
+            confirmBtn.disabled = false;
+          },
+        });
+      } catch (_) { /* leave the stale map if reload fails */ }
+    }
+  }
+}
+
+function wireBooking() {
+  const modal = document.getElementById("bookingModal");
+  if (!modal) return;
+  document.getElementById("closeBookingModal").addEventListener("click", closeBookingModal);
+  document.getElementById("confirmBookingBtn").addEventListener("click", confirmBooking);
+  document.getElementById("bookingDoneBtn").addEventListener("click", closeBookingModal);
+  document.getElementById("bookingViewBtn").addEventListener("click", () => {
+    closeBookingModal();
+    if (typeof showBookings === "function") showBookings();
+  });
 }
 
 /* ---- ADM-02 / RES-01: reusable seat map --------------------------------- */
@@ -760,4 +869,5 @@ document.addEventListener("DOMContentLoaded", () => {
   wireDashboard();
   wireBookings();
   wireFlightSearch();
+  wireBooking();
 });
