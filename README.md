@@ -1,10 +1,10 @@
 # Group 15 — Airline Flight Reservation System
 
-CP317-F course project. This repository delivers user accounts, flight search,
-the real booking/cancel spine, role-based access control, and the ADM-02
-passenger-list seat map. Built with **FastAPI + SQLite + SQLAlchemy** on the
-backend and **vanilla HTML/CSS/JS** on the frontend. Ships with both a
-**light** and a **dark** theme.
+CP317-F course project. A web-based airline reservation system: customers search
+flights, view details, book a seat, cancel, and review their bookings; admins
+manage flight schedules and view per-flight passenger manifests on a visual seat
+map. Built with **FastAPI + SQLAlchemy + SQLite** on the backend and **vanilla
+HTML/CSS/JS** on the frontend, with light and dark themes.
 
 ---
 
@@ -12,7 +12,7 @@ backend and **vanilla HTML/CSS/JS** on the frontend. Ships with both a
 
 | Role | Member |
 |------|--------|
-| Product Owner (Developer) | Aryan Shah |
+| **Product Owner** (Developer) | **Aryan Shah** |
 | Scrum Master (Developer) | Shazaib Malik |
 | Frontend Lead Developer | Noah Yamin |
 | Backend Lead Developer | Abdullah Mumtaz |
@@ -24,179 +24,185 @@ backend and **vanilla HTML/CSS/JS** on the frontend. Ships with both a
 
 ---
 
-## Product backlog
+## Story status
 
-| Story ID | Title | Points | Priority | Sprint |
-|----------|-------|:------:|----------|--------|
-| UI-01  | Search Flights        | 5 | High   | Sprint 1 |
-| UI-02  | View Flight Details   | 5 | High   | Sprint 1 |
-| RES-01 | Book Flight           | 3 | High   | Sprint 1 |
-| RES-02 | Cancel Reservation    | 3 | Medium | Sprint 1 |
-| ACC-01 | User Login            | 3 | High   | Sprint 1 |
-| ACC-02 | View Booking History  | 5 | Medium | Sprint 2 |
-| ADM-01 | Manage Flights        | 5 | High   | Sprint 2 |
-| ADM-02 | View Passenger List   | 5 | High   | Sprint 2 |
-| REP-01 | Generate Reports      | 8 | Medium | Sprint 3 |
-| SEC-01 | Secure Payments       | 8 | High   | Sprint 3 |
+Legend: ✅ Done · 🟡 Partial · ⬜ Not started
 
----
+| Story | Title | Sprint | Status | Notes |
+|-------|-------|--------|:------:|-------|
+| ACC-01 | User Login | 1 | ✅ | Register, login, profile setup; Argon2id hashing; session cookies (admins skip profile setup) |
+| UI-01 | Search Flights | 1 | ✅ | Search by origin/destination/date against a real flights table |
+| UI-02 | View Flight Details | 1 | ✅ | Full flight metadata endpoint + detail view |
+| RES-01 | Book Flight | 1 | ✅ | Web flow: search → seat-map selection → confirmation with booking reference; persists a reservation, decrements seats |
+| RES-02 | Cancel Reservation | 1 | ✅ | Runs on the real reservations table; email-confirmation guard; frees the seat |
+| ADM-01 | Manage Flights | 2 | ✅ | Admin CRUD on flights, with capacity validation |
+| ADM-02 | View Passenger List | 2 | ✅ | Visual seat map + manifest; admin-only; passenger identity hidden from customers |
+| ACC-02 | View Booking History | 2 | 🟡 | "My Bookings" shows ongoing/cancelled reservations; downloadable e-tickets not implemented |
+| REP-01 | Generate Reports | 3 | ⬜ | Not started (route popularity / booking trends) |
+| SEC-01 | Secure Payments | 3 | ⬜ | Not started (payment gateway integration) |
 
-## What this repo delivers
-
-| Story | Title | Status |
-|-------|-------|--------|
-| ACC-01 | User Login | Done |
-| UI-01 | Search Flights | Done |
-| UI-02 | View Flight Details | Done |
-| RES-01 | Book Flight | Done |
-| RES-02 | Cancel Reservation | Done |
-| ADM-02 | View Passenger List (seat map) | Done |
-| — | RBAC (`role` on users + `require_admin`) | Done |
-
-**ACC-01 — User Login.** Login → Sign Up → Profile Setup → Dashboard.
-Passwords are Argon2id-hashed; sessions use signed cookies.
-
-**UI-01 / UI-02 — Search & Details.** Real `flights` table (150 seeded rows).
-`GET /api/flights/search`, `/airports`, and `/{id}`.
-
-**RES-01 — Book Flight.** `POST /api/bookings` writes a real `reservations`
-row for a logged-in user, validates the seat against the aircraft config,
-rejects taken seats / full flights, generates a booking reference, and
-decrements `seats_available`.
-
-**RES-02 — Cancel Reservation.** Now backed by the `reservations` table (the
-old in-memory dummy store is gone). Cancelling flips status to `CANCELLED`,
-frees the seat back into inventory, and issues a verification code — the
-existing cancel UI is unchanged.
-
-**ADM-02 — View Passenger List.** Admin-only manifest plus a **visual seat
-map** of the aircraft cabin (A320 single-aisle / B787 twin-aisle), driven by
-`backend/aircraft.py`. Occupied seats reveal passenger + booking reference to
-admins only; a table-view toggle provides an accessible fallback. Reached from
-`passengers.html` (a nav link appears on the dashboard for admin accounts).
-
-**RBAC.** Users carry a `role` (`customer` | `admin`). Admin endpoints depend
-on `require_admin`, so standard users get `403`. The seat-map endpoint omits
-passenger identities for non-admins (privacy).
-
-### Key API endpoints
-
-| Method + path | Auth | Purpose |
-|---------------|------|---------|
-| `POST /api/bookings` | login | Book a flight (RES-01) |
-| `GET /api/bookings[/ongoing\|/cancelled]` | login | List your reservations |
-| `PUT /api/bookings/{id}/cancel` | login | Cancel a reservation (RES-02) |
-| `GET /api/flights/{id}/passengers` | **admin** | Manifest (ADM-02) |
-| `GET /api/flights/{id}/seatmap` | login | Seat map (names admin-only) |
+**Summary: 7 stories complete, 1 partial, 2 not started.** Remaining work is
+Sprint 3 scope — reporting/analytics (REP-01), payments (SEC-01), and finishing
+ACC-02 (e-tickets / richer history).
 
 ---
 
-## Setup
+## Features delivered
 
-Requires Python 3.10+.
+- **Accounts & profiles** — registration, login, profile setup; passwords hashed
+  with **Argon2id**; server-side sessions. Admin accounts skip the customer
+  profile-setup step and land on the dashboard.
+- **Role-based access control** — `users.role` (`customer` / `admin`); a
+  `require_admin` guard protects all admin endpoints (verified: customers get
+  `403`).
+- **Flight search & details** — real `flights` table (seeded), searchable by
+  origin/destination/date, plus a full detail endpoint.
+- **Booking** — end-to-end web flow: pick a flight, choose a seat on the visual
+  seat map, optionally add accommodations, then confirm. Persists a `reservation`
+  linked to a real flight, generates a `booking_reference`, decrements
+  `seats_available`, and shows a confirmation screen; the reservation then
+  appears under "My Bookings".
+- **Cancellation** — on the real reservations table; requires email confirmation;
+  flips status to `CANCELLED`, frees the seat, returns a verification code.
+- **Admin — Manage Flights (ADM-01)** — create/update/delete flights with
+  capacity validation against confirmed reservations.
+- **Admin — Passenger List (ADM-02)** — per-flight manifest rendered as a
+  **visual aircraft seat map** styled like an airline fleet map: a fuselage with
+  colour-coded seat types (Standard / Preferred / Extra legroom / Business),
+  over-wing exit rows, and centred cabins (A320 3-3 single-aisle, B787 3-3-3
+  twin-aisle). Occupied seats reveal the passenger + booking reference + any
+  accommodation to admins only; a table view provides an accessible fallback.
 
-```bash
-# 1. From the project root, create and activate a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+### Accessibility
 
-# 2. Install dependencies
-pip install -r backend/requirements.txt
+The project targets WCAG-style accessibility:
 
-# 3. Seed the database (flights first, then reservations + accounts)
-python seed_flights.py         # 150 flights with A320/B787 aircraft types
-python seed_reservations.py    # admin + sample customers + reservations
-
-# 4. Run the app (serves API + frontend together)
-uvicorn backend.main:app --reload
-```
-
-Then open **http://127.0.0.1:8000** in your browser.
-
-> **Schema change / clean checkout:** this sprint adds columns (`users.role`,
-> `flights.aircraft_type`) and the `reservations` table. `create_all` does not
-> alter existing tables, so if you have an **old `airline.db`**, delete it and
-> reseed: `rm airline.db && python seed_flights.py && python seed_reservations.py`.
-> `seed_flights.py` now creates the tables itself, so it no longer crashes on a
-> fresh checkout.
-
----
-
-## Test credentials
-
-Seeded by `seed_reservations.py`:
-
-| Role | Email | Password |
-|------|-------|----------|
-| Admin (ADM-02) | `admin@air.ca` | `admin1234` |
-| Customer | `aisha@air.ca` (and marco/wei/sara/liam @air.ca) | `skyhigh12` |
-
-Or create your own account through the Sign Up screen (new accounts are
-`customer` by default).
+- Seats are real focusable `<button>`s with descriptive `aria-label`s
+  (e.g. "Seat 14C, Extra legroom, occupied, Aisha Khan").
+- State is never conveyed by colour alone — occupied/selected differ in fill and
+  are described in the label; an accommodation marker (♿) supplements colour.
+- The passenger manifest has a **table view toggle** as a screen-reader- and
+  keyboard-friendly alternative to the visual map.
+- Light and dark themes with a persisted toggle.
 
 ---
 
-## How the login flow works
+## Tech stack
 
-1. **Sign Up** validates the email format, password length (min 8), and that
-   the two passwords match, then stores the account.
-2. Passwords are **hashed with Argon2id** before storage — the plaintext is
-   never saved. (See `backend/auth.py`.)
-3. **Login** verifies the entered password against the stored hash. On success
-   it checks whether a profile exists: if not, it routes to **Profile Setup**;
-   if so, straight to the **Dashboard**.
-4. Sessions use signed cookies, so the browser never holds a raw user id.
-
----
-
-## Running the tests
-
-```bash
-pip install pytest httpx
-pytest -v
-```
-
-`tests/test_auth.py` covers the ACC-01 login flow (registration, duplicate
-emails, password validation, login routing, Argon2id hashing).
-`tests/test_bookings.py` covers the reservations spine against a throwaway DB:
-booking (create, invalid seat → 400, seat-taken → 409, full flight → 409),
-cancel (verification code, seat freeing, wrong-email → 403, double-cancel → 400,
-ownership), RBAC (customer → 403 / admin → 200), and the ADM-02 manifest +
-seat-map privacy (names hidden for customers, revealed for admins).
-
----
-
-## Taking screenshots for the Sprint 1 PDF
-
-1. Run the app and open each screen: `login.html`, `signup.html`,
-   `profile.html`, `dashboard.html`, and (as admin) `passengers.html`.
-2. Use the floating **theme toggle** (top-right) to capture each in both light
-   and dark.
-3. For the "database connection" evidence, run:
-   ```bash
-   sqlite3 airline.db "SELECT id, email, substr(password_hash,1,30) FROM users;"
-   ```
-   and screenshot the hashed-password output — it shows the DB is real and that
-   passwords are not stored in plaintext.
+- **Backend:** Python, FastAPI, SQLAlchemy, SQLite, Argon2 (`argon2-cffi`)
+- **Frontend:** vanilla HTML / CSS / JavaScript (served as static files)
+- **Tests:** pytest + FastAPI `TestClient`
 
 ---
 
 ## Project structure
 
 ```
-group15-airline/
+Airline_sprint1/
 ├── backend/
-│   ├── main.py          # FastAPI routes + static serving
-│   ├── database.py      # SQLAlchemy engine + User/UserProfile/Flight/Reservation
-│   ├── aircraft.py      # A320/B787 cabin configs + seat helpers (seat map)
-│   ├── auth.py          # Argon2id hashing helpers
+│   ├── main.py              # all API routes
+│   ├── database.py          # SQLAlchemy models: User, UserProfile, Flight, Reservation
+│   ├── aircraft.py          # A320 / B787 cabin layouts + seat-type/exit-row config
+│   ├── auth.py              # Argon2id hashing
 │   └── requirements.txt
 ├── frontend/
-│   ├── login.html  signup.html  profile.html  dashboard.html  passengers.html
-│   ├── css/styles.css   # both themes via CSS variables (+ seat-map styles)
-│   └── js/app.js
-├── seed_flights.py      # seed 150 flights (run first)
-├── seed_reservations.py # seed admin + customers + reservations (run second)
-├── tests/test_auth.py   tests/test_bookings.py
+│   ├── login.html  signup.html  profile.html
+│   ├── dashboard.html       # search, booking flow, My Bookings
+│   ├── manage-flights.html  # ADM-01 admin CRUD UI
+│   ├── passengers.html      # ADM-02 seat-map / passenger list
+│   ├── css/styles.css
+│   └── js/app.js            # app logic + shared seat-map component
+│       js/manage-flights.js
+├── seed_flights.py          # seeds ~150 flights (self-creates tables)
+├── seed_reservations.py     # seeds an admin, customers, and sample reservations
+├── tests/                   # test_auth.py, test_bookings.py, test_manage_flights.py
+├── BookFlightsUI.py         # obsolete standalone Tkinter prototype — kept for reference, NOT part of the web app
+├── .env.example             # SESSION_SECRET_KEY template
 └── README.md
 ```
+
+---
+
+## Setup & run
+
+Requires **Python 3.10+**.
+
+```bash
+pip install -r backend/requirements.txt
+
+# Seed data — run flights first, then reservations (reservations attach to real
+# flights, so they need the flights to exist):
+python3 seed_flights.py         # ~150 flights across A320 and B787 aircraft
+python3 seed_reservations.py    # admin + customer accounts + sample reservations
+
+# Run the app:
+uvicorn backend.main:app --reload
+```
+
+Open **http://localhost:8000** (redirects to the login page). The SQLite
+database file `airline.db` is created automatically.
+
+### Test credentials (from `seed_reservations.py`)
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@air.ca` | `admin1234` |
+| Customer | `aisha@air.ca` | `skyhigh12` |
+
+(Additional seeded customers use the same customer password.)
+
+---
+
+## API reference
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/register` | — | Create an account |
+| POST | `/api/login` | — | Authenticate; returns `role` + `next_screen` |
+| POST | `/api/profile` | session | Save passenger profile |
+| GET | `/api/me` | — | Current session / role / profile status |
+| POST | `/api/logout` | session | End session |
+| POST | `/api/bookings` | session | Book a flight (seat + reservation) |
+| GET | `/api/bookings` `/ongoing` `/cancelled` | session | Current user's reservations |
+| PUT | `/api/bookings/{id}/cancel` | session | Cancel a reservation |
+| GET | `/api/flights/airports` | — | Distinct origins/destinations |
+| GET | `/api/flights/search` | — | Search flights |
+| GET | `/api/flights/{id}` | — | Flight details |
+| GET | `/api/flights/{id}/seatmap` | session | Seat map + occupancy + seat types (names admin-only) |
+| GET | `/api/flights/{id}/passengers` | **admin** | Passenger manifest (ADM-02) |
+| GET/POST/PUT/DELETE | `/api/admin/flights` | **admin** | Manage flights (ADM-01) |
+
+---
+
+## Tests
+
+```bash
+pip install pytest
+pytest -q
+```
+
+**Current status: 43 tests passing** — `test_auth.py` (10, login/registration),
+`test_bookings.py` (17, booking + cancel + RBAC + seat-map/manifest),
+`test_manage_flights.py` (16, admin CRUD + RBAC).
+
+---
+
+## Known issues & limitations
+
+- **ACC-02 is partial** — a user can view their ongoing/cancelled bookings under
+  "My Bookings," but downloadable e-tickets and a richer itinerary history are
+  not implemented.
+- **REP-01 (reports) and SEC-01 (payments) are not started** — planned for
+  Sprint 3.
+- **No real payment step** — booking completes without payment; SEC-01 will add
+  the gateway.
+- **Seat-map layouts are simplified** — the A320 and B787 configs in
+  `aircraft.py` (cabins, seat types, exit rows) are representative, not exact
+  airline cabins.
+- **`BookFlightsUI.py` is obsolete** — an early standalone Tkinter prototype with
+  hardcoded flights and no persistence. It is kept in the repo for reference but
+  is not part of the web app; the real booking path is the web flow via
+  `POST /api/bookings`.
+- **Schema note for contributors:** the database is created via
+  `Base.metadata.create_all`, which does not migrate an existing `airline.db`. If
+  you pull schema changes, delete `airline.db` and reseed.
