@@ -61,6 +61,23 @@ def promote_to_admin(email):
     db.close()
 
 
+def test_admin_login_skips_profile_setup():
+    # A profile-less admin should route straight to the dashboard, while a
+    # profile-less customer is still sent to Profile Setup first.
+    c = TestClient(app)
+    c.post("/api/register", json={
+        "email": "boss@example.com", "password": "skyhigh12",
+        "confirm_password": "skyhigh12"})
+    assert c.post("/api/login", json={
+        "email": "boss@example.com", "password": "skyhigh12"}).json()["next_screen"] == "profile"
+
+    promote_to_admin("boss@example.com")
+    body = c.post("/api/login", json={
+        "email": "boss@example.com", "password": "skyhigh12"}).json()
+    assert body["role"] == "admin"
+    assert body["next_screen"] == "dashboard"
+
+
 def seed_flight(flight_number="AC888", aircraft_type="A320", seats=None,
                 origin="Toronto", destination="London"):
     """Insert a real flight and return its id."""

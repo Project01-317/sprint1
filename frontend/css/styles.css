@@ -242,6 +242,10 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
 }
 .theme-toggle:hover { color: var(--text); }
 
+/* Logout affordance for pages without the full nav bar (e.g. Profile Setup),
+   mirroring the theme toggle but anchored to the top-left. */
+.logout-toggle { right: auto; left: 18px; }
+
 /* ==========================================================================
    Dashboard shell (landing target after login) — shared team nav
    ========================================================================== */

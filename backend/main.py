@@ -316,11 +316,16 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     request.session["user_id"] = user.id
     has_profile = user.profile is not None
-    # next_screen mirrors the example's "if userInfo == null -> Profile Setup".
+    # Admins manage flights/passengers and don't book travel, so they don't need
+    # a passenger profile — send them straight to the dashboard. Customers still
+    # complete Profile Setup first (mirrors "if userInfo == null -> Profile Setup").
+    is_admin = user.role == "admin"
+    next_screen = "dashboard" if (has_profile or is_admin) else "profile"
     return {
         "message": "Login successful.",
         "has_profile": has_profile,
-        "next_screen": "dashboard" if has_profile else "profile",
+        "role": user.role,
+        "next_screen": next_screen,
     }
 
 
