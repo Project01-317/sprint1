@@ -255,7 +255,9 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
   display: flex;
   align-items: center;
   gap: 26px;
-  padding: 0 26px;
+  /* Extra right padding reserves room for the fixed theme toggle so it never
+     overlaps the user email / log-out control at the end of the nav. */
+  padding: 0 132px 0 26px;
   height: 58px;
 }
 .app-nav .brand {
@@ -274,7 +276,19 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
 .app-nav a.active, .app-nav a:hover { color: var(--header-text); }
 .app-nav .spacer { flex: 1; }
 .app-nav .user { font-size: 0.88rem; display: flex; align-items: center; gap: 14px; }
-.app-nav .user .logout { color: var(--steel); cursor: pointer; font-weight: 600; }
+.app-nav .user .logout {
+  color: var(--header-text);
+  cursor: pointer;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  padding: 5px 13px;
+  transition: background var(--transition), border-color var(--transition);
+}
+.app-nav .user .logout:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.6);
+}
 
 .dash-body { padding: 40px 26px; max-width: 1000px; margin: 0 auto; }
 .welcome {
