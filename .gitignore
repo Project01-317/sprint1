@@ -36,3 +36,6 @@ Thumbs.db
 desktop.ini
 
 .xlsx
+
+# ---- Archives / imported bundles ----
+*.zip
