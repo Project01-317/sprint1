@@ -549,6 +549,8 @@ async function openBookingModal(flight) {
   const alert = document.getElementById("bookingModalAlert");
   clearAlert(alert);
 
+  const legend = document.getElementById("bookingLegend");
+  if (legend) legend.innerHTML = seatMapLegendHTML();
   const mapEl = document.getElementById("bookingSeatMap");
   mapEl.innerHTML = '<div class="empty-state">Loading seat map…</div>';
   modal.hidden = false;
@@ -641,9 +643,49 @@ function wireBooking() {
  *   selectable — allow clicking an available seat (booking flow); calls
  *                onSelect(seatId) and tracks a single highlighted selection.
  */
+const SEAT_TYPE_LABEL = {
+  business: "Business",
+  extra_legroom: "Extra legroom",
+  preferred: "Preferred",
+  standard: "Standard",
+};
+
 function renderSeatMap(payload, container, { adminView = false, selectable = false, onSelect = null } = {}) {
   container.innerHTML = "";
-  let selectedSeat = null;
+
+  // Fuselage: nose cone -> cabins -> tail, wrapped in a hull with wings.
+  const aircraft = document.createElement("div");
+  aircraft.className = "aircraft";
+
+  const nose = document.createElement("div");
+  nose.className = "aircraft-nose";
+  nose.setAttribute("aria-hidden", "true");
+  aircraft.appendChild(nose);
+
+  const body = document.createElement("div");
+  body.className = "aircraft-body";
+
+  // Helper: a row of aisle-aware cells (used for the column-letter header).
+  const buildLetterHeader = (cabin) => {
+    const head = document.createElement("div");
+    head.className = "seat-row col-head";
+    head.setAttribute("aria-hidden", "true");
+    const pad = document.createElement("span");
+    pad.className = "row-number";
+    head.appendChild(pad);
+    cabin.columns.forEach((col) => {
+      const c = document.createElement("span");
+      c.className = "col-letter";
+      c.textContent = col;
+      head.appendChild(c);
+      if (cabin.aisles_after.includes(col)) {
+        const gap = document.createElement("span");
+        gap.className = "aisle-gap";
+        head.appendChild(gap);
+      }
+    });
+    return head;
+  };
 
   payload.cabins.forEach((cabin) => {
     const section = document.createElement("div");
@@ -654,9 +696,17 @@ function renderSeatMap(payload, container, { adminView = false, selectable = fal
     label.textContent = cabin.class;
     section.appendChild(label);
 
+    section.appendChild(buildLetterHeader(cabin));
+
+    const exitRows = cabin.exit_rows || [];
+
     cabin.rows.forEach((row) => {
       const rowEl = document.createElement("div");
       rowEl.className = "seat-row";
+      if (exitRows.includes(row.row)) {
+        rowEl.classList.add("exit-row");
+        rowEl.appendChild(makeExitTab("left"));
+      }
 
       const num = document.createElement("span");
       num.className = "row-number";
@@ -667,11 +717,13 @@ function renderSeatMap(payload, container, { adminView = false, selectable = fal
         const seat = row.seats.find((s) => s.seat === `${row.row}${col}`);
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = `seat-btn ${seat.status}`;
+        const stype = seat.seat_type || "standard";
+        btn.className = `seat-btn ${seat.status} type-${stype}`;
         btn.textContent = col;
 
         const occupied = seat.status === "occupied";
-        let aria = `Seat ${seat.seat}, ${seat.status}`;
+        const typeLabel = SEAT_TYPE_LABEL[stype] || "Standard";
+        let aria = `Seat ${seat.seat}, ${typeLabel}, ${seat.status}`;
 
         if (occupied && adminView && seat.passenger) {
           aria += `, ${seat.passenger}`;
@@ -693,8 +745,6 @@ function renderSeatMap(payload, container, { adminView = false, selectable = fal
           btn.title = tip;
         }
 
-        if (occupied) btn.disabled = true;
-
         if (selectable && !occupied) {
           btn.addEventListener("click", () => {
             container.querySelectorAll(".seat-btn.selected").forEach((b) => {
@@ -703,11 +753,10 @@ function renderSeatMap(payload, container, { adminView = false, selectable = fal
             });
             btn.classList.remove("available");
             btn.classList.add("selected");
-            selectedSeat = seat.seat;
             if (onSelect) onSelect(seat.seat);
           });
-        } else if (!occupied) {
-          btn.disabled = true; // admin/manifest view: seats are not clickable
+        } else {
+          btn.disabled = true; // occupied, or a non-selectable (admin/manifest) view
         }
 
         btn.setAttribute("aria-label", aria);
@@ -721,11 +770,41 @@ function renderSeatMap(payload, container, { adminView = false, selectable = fal
         }
       });
 
+      if (exitRows.includes(row.row)) rowEl.appendChild(makeExitTab("right"));
       section.appendChild(rowEl);
     });
 
-    container.appendChild(section);
+    body.appendChild(section);
   });
+
+  aircraft.appendChild(body);
+
+  const tail = document.createElement("div");
+  tail.className = "aircraft-tail";
+  tail.setAttribute("aria-hidden", "true");
+  aircraft.appendChild(tail);
+
+  container.appendChild(aircraft);
+}
+
+function makeExitTab(side) {
+  const tab = document.createElement("span");
+  tab.className = `exit-tab ${side}`;
+  tab.textContent = "EXIT";
+  tab.setAttribute("aria-hidden", "true");
+  return tab;
+}
+
+/* Build the seat-type + state legend used above every seat map. */
+function seatMapLegendHTML() {
+  return (
+    '<span class="legend-item"><span class="seat-swatch type-standard"></span> Standard</span>' +
+    '<span class="legend-item"><span class="seat-swatch type-preferred"></span> Preferred</span>' +
+    '<span class="legend-item"><span class="seat-swatch type-extra_legroom"></span> Extra legroom</span>' +
+    '<span class="legend-item"><span class="seat-swatch type-business"></span> Business</span>' +
+    '<span class="legend-item"><span class="seat-swatch occupied"></span> Occupied</span>' +
+    '<span class="legend-item"><span class="seat-swatch selected"></span> Selected</span>'
+  );
 }
 
 let _seatTooltipEl = null;
@@ -827,6 +906,11 @@ async function wirePassengerList() {
         `<span><strong>${cap}</strong> capacity</span>` +
         `<span><strong>${load}%</strong> load factor</span>`;
 
+      const legend = document.getElementById("seatmapLegend");
+      if (legend) {
+        legend.innerHTML = seatMapLegendHTML() +
+          '<span class="legend-item"><span class="accom-mark">♿</span> Accommodation</span>';
+      }
       renderSeatMap(seatmap, mapView, { adminView: true });
       renderManifestTable(manifest.passengers);
       setView("map");

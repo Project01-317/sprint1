@@ -740,6 +740,7 @@ def get_seatmap(flight_id: int, request: Request, db: Session = Depends(get_db))
                 seat_obj = {
                     "seat": seat_id,
                     "status": "occupied" if res else "available",
+                    "seat_type": aircraft.seat_type(flight.aircraft_type, seat_id),
                 }
                 if res and is_admin:
                     u = res.user
@@ -757,6 +758,7 @@ def get_seatmap(flight_id: int, request: Request, db: Session = Depends(get_db))
             "class": cabin["class"],
             "aisles_after": cabin["aisles_after"],
             "columns": cabin["columns"],
+            "exit_rows": cabin.get("exit_rows", []),
             "rows": rows,
         })
 
