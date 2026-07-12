@@ -615,9 +615,15 @@ html[data-theme="dark"] {
   background: var(--hull);
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
   padding: 14px 30px 18px;
+  /* Centre each cabin in the hull, so a narrow 2-2 business cabin sits toward
+     the middle rather than left-aligned under the wider economy cabin. */
+  display: flex; flex-direction: column; align-items: center;
 }
 
-.cabin { margin-bottom: 20px; }
+.cabin {
+  margin-bottom: 20px;
+  display: flex; flex-direction: column; align-items: flex-start;
+}
 .cabin:last-child { margin-bottom: 0; }
 .cabin-label {
   font-family: var(--font-display); font-weight: 600; font-size: 1rem;
