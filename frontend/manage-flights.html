@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Flights — Group 15 Airline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spline+Sans:wght@500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <button class="theme-toggle" onclick="toggleTheme()">
+    <span>◐</span><span class="label">Dark</span>
+  </button>
+
+  <nav class="app-nav">
+    <span class="brand">
+      <svg class="plane" viewBox="0 0 24 24"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
+    </span>
+    <a href="dashboard.html">Dashboard</a>
+    <span class="spacer"></span>
+    <span class="user">
+      <span id="navEmail">—</span>
+      <span class="logout" onclick="logout()">Log out</span>
+    </span>
+  </nav>
+
+  <main class="dash-body manage-flights-page" id="manageFlightsPage" hidden>
+    <div class="section-head manage-flights-heading">
+      <div>
+        <h1 class="welcome">Manage Flights</h1>
+        <p class="welcome-sub">Add new flights or update existing schedules, prices, aircraft and availability.</p>
+      </div>
+      <button type="button" class="btn btn-primary bubbly-btn manage-flights-add" id="addFlightBtn">Add New Flight</button>
+    </div>
+
+    <div id="manageFlightsAlert" class="alert" role="alert"></div>
+    <div class="field manage-flights-search">
+      <label class="sr-only" for="manageFlightsSearch">Search by flight number</label>
+      <input id="manageFlightsSearch" type="search" placeholder="Search by flight number" />
+    </div>
+    <div id="manageFlightsLoading" class="empty-state">Loading scheduled flights…</div>
+    <div id="manageFlightsEmpty" class="empty-state" hidden>No flights are currently scheduled.</div>
+
+    <div class="booking-table-wrap manage-flights-table-wrap" id="manageFlightsTableWrap" hidden>
+      <table class="bookings-table manage-flights-table">
+        <caption class="sr-only">All flights available for administration</caption>
+        <thead>
+          <tr>
+            <th scope="col">Flight</th>
+            <th scope="col">Route</th>
+            <th scope="col">Departure</th>
+            <th scope="col">Arrival</th>
+            <th scope="col">Price</th>
+            <th scope="col">Available</th>
+            <th scope="col">Aircraft</th>
+            <th scope="col"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody id="manageFlightsTableBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="flightFormModal" hidden>
+    <div class="modal flight-form-modal" role="dialog" aria-modal="true" aria-labelledby="flightFormTitle">
+      <h2 id="flightFormTitle">Add New Flight</h2>
+      <p class="modal-copy">Enter the schedule and inventory details for this flight.</p>
+      <form id="flightForm">
+        <div class="flight-form-grid">
+          <div class="field"><label for="flightNumber">Flight number</label><input id="flightNumber" name="flight_number" type="text" required /></div>
+          <div class="field"><label for="flightAirline">Airline</label><input id="flightAirline" name="airline" type="text" required /></div>
+          <div class="field"><label for="flightOrigin">Origin</label><input id="flightOrigin" name="origin" type="text" required /></div>
+          <div class="field"><label for="flightDestination">Destination</label><input id="flightDestination" name="destination" type="text" required /></div>
+          <div class="field"><label for="flightDeparture">Departure date and time</label><input id="flightDeparture" name="departure_time" type="datetime-local" required /></div>
+          <div class="field"><label for="flightArrival">Arrival date and time</label><input id="flightArrival" name="arrival_time" type="datetime-local" required /></div>
+          <div class="field"><label for="flightPrice">Price (CAD)</label><input id="flightPrice" name="price" type="number" min="0.01" step="0.01" required /></div>
+          <div class="field"><label for="flightSeats">Available seats</label><input id="flightSeats" name="seats_available" type="number" min="0" step="1" required /></div>
+          <div class="field"><label for="flightAircraft">Aircraft type</label><select id="flightAircraft" name="aircraft_type" required><option value="A320">Airbus A320</option><option value="B787">Boeing 787-9</option></select></div>
+        </div>
+        <div id="flightFormAlert" class="alert" role="alert"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="cancelFlightFormBtn" type="button">Cancel</button>
+          <button class="btn btn-primary" id="submitFlightFormBtn" type="submit">Add Flight</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="adminConfirmModal" hidden>
+    <div class="modal admin-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle">
+      <h2 id="adminConfirmTitle">Confirm flight change</h2>
+      <p id="adminConfirmSummary" class="modal-copy"></p>
+      <form id="adminConfirmForm">
+        <div class="field">
+          <label for="adminConfirmEmail">Re-enter account email</label>
+          <input id="adminConfirmEmail" type="email" autocomplete="email" required />
+        </div>
+        <div id="adminConfirmAlert" class="alert" role="alert"></div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="cancelAdminConfirmBtn" type="button">Cancel</button>
+          <button class="btn btn-primary" id="confirmAdminActionBtn" type="submit">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="flightSuccessModal" hidden>
+    <div class="modal manage-flights-success-modal" role="dialog" aria-modal="true" aria-labelledby="flightSuccessTitle">
+      <button class="manage-flights-close" id="closeFlightSuccessBtn" type="button" aria-label="Close success dialog">×</button>
+      <h2 id="flightSuccessTitle">Flight updated</h2>
+      <p id="flightSuccessMessage" class="modal-copy"></p>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+  <script src="js/manage-flights.js"></script>
+</body>
+</html>

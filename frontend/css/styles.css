@@ -587,3 +587,58 @@ html[data-theme="dark"] .btn-danger { color: #1d0f13; }
   box-shadow: var(--shadow); max-width: 240px;
 }
 .seat-tooltip .ref { font-family: var(--font-mono); color: var(--pale); }
+
+/* ===========================================================================
+   ADM-01 — Manage flights (scoped additions; shared theme tokens only)
+   ========================================================================== */
+.manage-flights-heading { align-items: flex-start; }
+.manage-flights-heading .welcome-sub { margin-bottom: 0; }
+.manage-flights-add { width: auto; white-space: nowrap; }
+.manage-flights-table { min-width: 980px; }
+.manage-flights-table td { white-space: nowrap; }
+.manage-flights-muted { color: var(--text-muted); font-size: 0.8rem; margin-top: 3px; }
+.flight-actions-cell { width: 54px; }
+.flight-actions { position: relative; display: flex; justify-content: flex-end; }
+.flight-actions-trigger,
+.manage-flights-close {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.flight-actions-trigger {
+  width: 32px; height: 32px; border-radius: 8px;
+  font-size: 1.35rem; line-height: 1;
+}
+.flight-actions-trigger:hover,
+.flight-actions-trigger:focus-visible,
+.manage-flights-close:hover,
+.manage-flights-close:focus-visible {
+  color: var(--text); background: var(--accent-soft); outline: none;
+}
+.flight-actions-menu {
+  display: flex; flex-direction: column;
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 5;
+  width: 146px; padding: 5px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow);
+}
+.flight-actions-menu button {
+  width: 100%; border: 0; border-radius: 6px; padding: 9px 10px;
+  background: transparent; color: var(--text); cursor: pointer;
+  text-align: left; font-family: var(--font-body); font-size: 0.84rem;
+}
+.flight-actions-menu button:hover,
+.flight-actions-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.flight-form-modal { width: min(100%, 660px); }
+.flight-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.manage-flights-success-modal { position: relative; }
+.manage-flights-close {
+  position: absolute; top: 12px; right: 12px; width: 32px; height: 32px;
+  border-radius: 50%; font-size: 1.5rem; line-height: 1;
+}
+@media (max-width: 680px) {
+  .manage-flights-heading { display: block; }
+  .manage-flights-add { margin-top: 14px; }
+  .flight-form-grid { grid-template-columns: 1fr; }
+}

@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import string
+import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import cast, Date
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -90,6 +92,25 @@ class BookingRequest(BaseModel):
     flight_id: int
     seat: Optional[str] = None
     special_accommodations: Optional[str] = None
+
+
+class AdminFlightRequest(BaseModel):
+    """ADM-01 payload for creating or updating an existing Flight row."""
+    flight_number: str
+    airline: str
+    origin: str
+    destination: str
+    departure_time: datetime
+    arrival_time: datetime
+    price: float
+    seats_available: int
+    aircraft_type: str
+    account_email: str
+
+
+class AdminFlightDeleteRequest(BaseModel):
+    """DELETE bodies are supported by FastAPI and keep confirmation private."""
+    account_email: str
 
 
 def normalize_email(email: str) -> str:
@@ -165,6 +186,96 @@ def reservation_to_booking(res: Reservation) -> dict:
         "booking_reference": res.booking_reference,
         "special_accommodations": res.special_accommodations,
     }
+
+
+# --------------------------------------------------------------------------
+# ADM-01: flight management helpers
+# --------------------------------------------------------------------------
+def flight_to_admin_payload(flight: Flight) -> dict:
+    """Serialize the complete existing Flight model for the admin table."""
+    return {
+        "id": flight.id,
+        "flight_number": flight.flight_number,
+        "airline": flight.airline,
+        "origin": flight.origin,
+        "destination": flight.destination,
+        "departure_time": flight.departure_time.isoformat(),
+        "arrival_time": flight.arrival_time.isoformat(),
+        "price": flight.price,
+        "seats_available": flight.seats_available,
+        "aircraft_type": flight.aircraft_type,
+    }
+
+
+def _validated_admin_flight_values(
+    req: AdminFlightRequest,
+    db: Session,
+    current_flight_id: Optional[int] = None,
+) -> dict:
+    """Validate ADM-01 input without changing the Flight schema or inventory."""
+    values = {
+        "flight_number": req.flight_number.strip(),
+        "airline": req.airline.strip(),
+        "origin": req.origin.strip(),
+        "destination": req.destination.strip(),
+        "departure_time": req.departure_time,
+        "arrival_time": req.arrival_time,
+        "price": req.price,
+        "seats_available": req.seats_available,
+        "aircraft_type": req.aircraft_type.strip(),
+    }
+
+    for field in ("flight_number", "airline", "origin", "destination"):
+        if not values[field]:
+            raise HTTPException(400, f"{field.replace('_', ' ').title()} is required.")
+    if values["origin"].casefold() == values["destination"].casefold():
+        raise HTTPException(400, "Origin and destination must be different.")
+    if values["arrival_time"] <= values["departure_time"]:
+        raise HTTPException(400, "Arrival time must be later than departure time.")
+    if not math.isfinite(values["price"]) or values["price"] <= 0:
+        raise HTTPException(400, "Price must be greater than zero.")
+    if values["seats_available"] < 0:
+        raise HTTPException(400, "Available seats cannot be negative.")
+    if values["aircraft_type"] not in aircraft.AIRCRAFT_CONFIGS:
+        raise HTTPException(400, "Aircraft type is not supported.")
+
+    duplicate = db.query(Flight).filter(
+        func.lower(Flight.flight_number) == values["flight_number"].casefold()
+    )
+    if current_flight_id is not None:
+        duplicate = duplicate.filter(Flight.id != current_flight_id)
+    if duplicate.first() is not None:
+        raise HTTPException(409, "A flight with that flight number already exists.")
+
+    confirmed = (
+        db.query(Reservation)
+        .filter(
+            Reservation.flight_id == current_flight_id,
+            Reservation.status == "CONFIRMED",
+        )
+        .all()
+        if current_flight_id is not None else []
+    )
+    capacity = len(aircraft.all_seats(values["aircraft_type"]))
+    if values["seats_available"] > capacity - len(confirmed):
+        raise HTTPException(
+            400,
+            "Available seats cannot exceed aircraft capacity after confirmed reservations.",
+        )
+
+    # Changing an aircraft must not invalidate an already assigned seat.
+    available_seat_ids = set(aircraft.all_seats(values["aircraft_type"]))
+    if any(res.seat and res.seat not in available_seat_ids for res in confirmed):
+        raise HTTPException(
+            400,
+            "The selected aircraft cannot preserve the flight's confirmed seat assignments.",
+        )
+    return values
+
+
+def _confirm_admin_email(account_email: str, admin: User) -> None:
+    if normalize_email(account_email) != normalize_email(admin.email):
+        raise HTTPException(403, "Email confirmation does not match your logged-in email.")
 
 
 # --------------------------------------------------------------------------
@@ -390,6 +501,72 @@ def cancel_booking(
     }
 
 
+# --------------------------------------------------------------------------
+# ADM-01: Manage Flights (all operations are independently admin-protected)
+# --------------------------------------------------------------------------
+@app.get("/api/admin/flights")
+def admin_list_flights(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    flights = db.query(Flight).order_by(Flight.departure_time.asc()).all()
+    return [flight_to_admin_payload(flight) for flight in flights]
+
+
+@app.post("/api/admin/flights", status_code=201)
+def admin_create_flight(
+    req: AdminFlightRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _confirm_admin_email(req.account_email, admin)
+    values = _validated_admin_flight_values(req, db)
+    flight = Flight(**values)
+    db.add(flight)
+    db.commit()
+    db.refresh(flight)
+    return flight_to_admin_payload(flight)
+
+
+@app.put("/api/admin/flights/{flight_id}")
+def admin_update_flight(
+    flight_id: int,
+    req: AdminFlightRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _confirm_admin_email(req.account_email, admin)
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if flight is None:
+        raise HTTPException(404, "Flight not found.")
+
+    values = _validated_admin_flight_values(req, db, current_flight_id=flight_id)
+    for field, value in values.items():
+        setattr(flight, field, value)
+    db.commit()
+    db.refresh(flight)
+    return flight_to_admin_payload(flight)
+
+
+@app.delete("/api/admin/flights/{flight_id}")
+def admin_delete_flight(
+    flight_id: int,
+    req: AdminFlightDeleteRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _confirm_admin_email(req.account_email, admin)
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if flight is None:
+        raise HTTPException(404, "Flight not found.")
+    if db.query(Reservation).filter(Reservation.flight_id == flight_id).first():
+        raise HTTPException(409, "A flight with existing reservations cannot be deleted.")
+
+    db.delete(flight)
+    db.commit()
+    return {"message": "Flight successfully deleted."}
+
+
 @app.get("/api/flights/airports")
 def get_unique_airports(db: Session = Depends(get_db)):
     """Returns a unique list of all origins and destinations currently in the database for autocomplete."""
@@ -416,7 +593,7 @@ def search_flights(origin: str = None, destination: str = None, date: str = None
     if date:
         try:
             search_date = datetime.strptime(date, "%Y-%m-%d").date()
-            query = query.filter(cast(Flight.departure_time, Date) == search_date)
+            query = query.filter(func.date(Flight.departure_time) == search_date.isoformat())
         except ValueError:
             raise HTTPException(400, "Invalid date format. Use YYYY-MM-DD.")
 

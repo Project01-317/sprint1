@@ -338,16 +338,9 @@ async function wireDashboard() {
     const emailEl = document.getElementById("navEmail");
     if (emailEl) emailEl.textContent = data.email;
 
-    // Admins get an extra nav entry for the ADM-02 passenger list.
+    // Admin navigation is rendered only after the role has been checked.
     if (data.role === "admin") {
-      const nav = document.querySelector(".app-nav .spacer");
-      if (nav && !document.getElementById("passengerListNav")) {
-        const link = document.createElement("a");
-        link.id = "passengerListNav";
-        link.href = "passengers.html";
-        link.textContent = "Passenger List";
-        nav.parentNode.insertBefore(link, nav);
-      }
+      ensureAdminNavigation("dashboard");
     }
   } catch (_) { /* leave page as-is on transient error */ }
 }
@@ -355,6 +348,26 @@ async function wireDashboard() {
 async function logout() {
   await fetch("/api/logout", { method: "POST" });
   window.location.href = "login.html";
+}
+
+function ensureAdminNavigation(activePage) {
+  const spacer = document.querySelector(".app-nav .spacer");
+  if (!spacer) return;
+  const entries = [
+    ["passengerListNav", "passengers.html", "Passenger List", "passengers"],
+    ["manageFlightsNav", "manage-flights.html", "Flights", "flights"],
+  ];
+  entries.forEach(([id, href, label, page]) => {
+    let link = document.getElementById(id);
+    if (!link) {
+      link = document.createElement("a");
+      link.id = id;
+      link.href = href;
+      link.textContent = label;
+      spacer.parentNode.insertBefore(link, spacer);
+    }
+    link.classList.toggle("active", activePage === page);
+  });
 }
 
 /* ---- Flight Search / Live Filter View ------------------------------------ */
@@ -647,6 +660,7 @@ async function wirePassengerList() {
       setTimeout(() => (window.location.href = "dashboard.html"), 1500);
       return;
     }
+    ensureAdminNavigation("passengers");
   } catch (_) { window.location.href = "login.html"; return; }
 
   // Populate the flight dropdown from the search endpoint.
