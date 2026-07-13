@@ -60,12 +60,14 @@
 
       <div id="bookingsAlert" class="alert"></div>
 
-      <div class="booking-tabs" role="tablist" aria-label="Booking status">
-        <button class="booking-tab active" id="ongoingBookingsTab" type="button" role="tab" aria-selected="true">Ongoing Bookings</button>
-        <button class="booking-tab" id="cancelledBookingsTab" type="button" role="tab" aria-selected="false">Cancelled Bookings</button>
+      <div class="booking-tabs" role="tablist" aria-label="Booking history">
+        <button class="booking-tab active" id="upcomingBookingsTab" type="button" role="tab" aria-selected="true">Upcoming</button>
+        <button class="booking-tab" id="pastBookingsTab" type="button" role="tab" aria-selected="false">Past</button>
+        <button class="booking-tab" id="cancelledBookingsTab" type="button" role="tab" aria-selected="false">Cancelled</button>
       </div>
 
-      <div id="ongoingBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="ongoingBookingsTab"></div>
+      <div id="upcomingBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="upcomingBookingsTab"></div>
+      <div id="pastBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="pastBookingsTab" hidden></div>
       <div id="cancelledBookingsPanel" class="booking-panel" role="tabpanel" aria-labelledby="cancelledBookingsTab" hidden></div>
     </section>
 

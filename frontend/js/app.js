@@ -32,14 +32,31 @@ function showAlert(el, message, type) {
 }
 function clearAlert(el) { el.className = "alert"; }
 
-/* ---- My Bookings / RES-02 cancellation ---------------------------------- */
+/* ---- My Bookings / ACC-02 history + RES-02 cancellation ----------------- */
 let bookingsLoaded = false;
-let activeBookingsTab = "ongoing";
+let activeBookingsTab = "upcoming";
 let bookingPendingCancellation = null;
-const bookingsState = { ongoing: [], cancelled: [] };
+const bookingsState = { upcoming: [], past: [], cancelled: [] };
+const BOOKING_TABS = ["upcoming", "past", "cancelled"];
+const BOOKING_ENDPOINT = {
+  upcoming: "/api/bookings/upcoming",
+  past: "/api/bookings/past",
+  cancelled: "/api/bookings/cancelled",
+};
+const BOOKING_EMPTY = {
+  upcoming: "No upcoming bookings.",
+  past: "No past trips yet.",
+  cancelled: "No cancelled bookings.",
+};
 
 function formatRoute(booking) {
   return `${booking.origin} to ${booking.destination}`;
+}
+
+function formatDepart(booking) {
+  if (!booking.departure_time) return booking.departure_date || "-";
+  const d = new Date(booking.departure_time);
+  return d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
 function createCell(text) {
@@ -48,15 +65,18 @@ function createCell(text) {
   return cell;
 }
 
+function downloadTicket(bookingId) {
+  // The Content-Disposition header makes the browser download the PDF.
+  window.location.href = `/api/bookings/${bookingId}/ticket`;
+}
+
 function renderBookingsTable(bookings, panel, type) {
   panel.innerHTML = "";
 
   if (!bookings.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = type === "ongoing"
-      ? "No ongoing bookings are available."
-      : "No cancelled bookings are available.";
+    empty.textContent = BOOKING_EMPTY[type] || "No bookings.";
     panel.appendChild(empty);
     return;
   }
@@ -68,8 +88,9 @@ function renderBookingsTable(bookings, panel, type) {
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  ["Booking", "Passenger", "Flight", "Route", "Departure", "Status", "Details"].forEach((label) => {
+  ["Ref", "Flight", "Route", "Departure", "Seat", "Status", "Actions"].forEach((label) => {
     const th = document.createElement("th");
+    th.scope = "col";
     th.textContent = label;
     headRow.appendChild(th);
   });
@@ -78,11 +99,18 @@ function renderBookingsTable(bookings, panel, type) {
   const tbody = document.createElement("tbody");
   bookings.forEach((booking) => {
     const row = document.createElement("tr");
-    row.appendChild(createCell(`#${booking.id}`));
-    row.appendChild(createCell(booking.passenger_name));
+
+    const refCell = document.createElement("td");
+    const ref = document.createElement("span");
+    ref.className = "verification-code";
+    ref.textContent = booking.booking_reference || "-";
+    refCell.appendChild(ref);
+    row.appendChild(refCell);
+
     row.appendChild(createCell(booking.flight_number));
     row.appendChild(createCell(formatRoute(booking)));
-    row.appendChild(createCell(booking.departure_date));
+    row.appendChild(createCell(formatDepart(booking)));
+    row.appendChild(createCell(booking.seat));
 
     const statusCell = document.createElement("td");
     const status = document.createElement("span");
@@ -91,25 +119,34 @@ function renderBookingsTable(bookings, panel, type) {
     statusCell.appendChild(status);
     row.appendChild(statusCell);
 
-    const detailCell = document.createElement("td");
-    if (type === "ongoing") {
-      const cancelButton = document.createElement("button");
-      cancelButton.type = "button";
-      cancelButton.className = "btn btn-danger btn-small";
-      cancelButton.textContent = "Cancel";
-      cancelButton.addEventListener("click", () => openCancelModal(booking));
-      detailCell.appendChild(cancelButton);
-    } else {
-      const code = document.createElement("span");
-      code.className = "verification-code";
-      code.textContent = booking.verification_code || "-";
-      detailCell.appendChild(code);
-
+    const actionCell = document.createElement("td");
+    actionCell.className = "booking-actions";
+    if (type === "cancelled") {
       const cancelledAt = document.createElement("div");
-      cancelledAt.textContent = `Cancelled: ${booking.cancellation_timestamp || "-"}`;
-      detailCell.appendChild(cancelledAt);
+      cancelledAt.className = "booking-muted";
+      cancelledAt.textContent = booking.cancellation_timestamp
+        ? `Cancelled ${new Date(booking.cancellation_timestamp).toLocaleDateString()}`
+        : "Cancelled";
+      actionCell.appendChild(cancelledAt);
+    } else {
+      // Upcoming and past confirmed bookings get an e-ticket download.
+      const ticketBtn = document.createElement("button");
+      ticketBtn.type = "button";
+      ticketBtn.className = "btn btn-ghost btn-small";
+      ticketBtn.textContent = "Download E-Ticket";
+      ticketBtn.addEventListener("click", () => downloadTicket(booking.id));
+      actionCell.appendChild(ticketBtn);
+
+      if (type === "upcoming") {
+        const cancelButton = document.createElement("button");
+        cancelButton.type = "button";
+        cancelButton.className = "btn btn-danger btn-small";
+        cancelButton.textContent = "Cancel";
+        cancelButton.addEventListener("click", () => openCancelModal(booking));
+        actionCell.appendChild(cancelButton);
+      }
     }
-    row.appendChild(detailCell);
+    row.appendChild(actionCell);
     tbody.appendChild(row);
   });
 
@@ -121,31 +158,25 @@ function renderBookingsTable(bookings, panel, type) {
 
 function setBookingsTab(tab) {
   activeBookingsTab = tab;
-
-  const ongoingTab = document.getElementById("ongoingBookingsTab");
-  const cancelledTab = document.getElementById("cancelledBookingsTab");
-  const ongoingPanel = document.getElementById("ongoingBookingsPanel");
-  const cancelledPanel = document.getElementById("cancelledBookingsPanel");
-
-  ongoingTab.classList.toggle("active", tab === "ongoing");
-  cancelledTab.classList.toggle("active", tab === "cancelled");
-  ongoingTab.setAttribute("aria-selected", tab === "ongoing" ? "true" : "false");
-  cancelledTab.setAttribute("aria-selected", tab === "cancelled" ? "true" : "false");
-  ongoingPanel.hidden = tab !== "ongoing";
-  cancelledPanel.hidden = tab !== "cancelled";
-
-  renderBookingsTable(bookingsState.ongoing, ongoingPanel, "ongoing");
-  renderBookingsTable(bookingsState.cancelled, cancelledPanel, "cancelled");
+  BOOKING_TABS.forEach((name) => {
+    const tabEl = document.getElementById(`${name}BookingsTab`);
+    const panelEl = document.getElementById(`${name}BookingsPanel`);
+    const isActive = name === tab;
+    tabEl.classList.toggle("active", isActive);
+    tabEl.setAttribute("aria-selected", isActive ? "true" : "false");
+    panelEl.hidden = !isActive;
+    renderBookingsTable(bookingsState[name], panelEl, name);
+  });
 }
 
 async function loadBookings() {
   const alert = document.getElementById("bookingsAlert");
   try {
-    const [ongoing, cancelled] = await Promise.all([
-      api("/api/bookings/ongoing", undefined, "GET"),
-      api("/api/bookings/cancelled", undefined, "GET"),
-    ]);
-    bookingsState.ongoing = ongoing;
+    const [upcoming, past, cancelled] = await Promise.all(
+      BOOKING_TABS.map((name) => api(BOOKING_ENDPOINT[name], undefined, "GET"))
+    );
+    bookingsState.upcoming = upcoming;
+    bookingsState.past = past;
     bookingsState.cancelled = cancelled;
     bookingsLoaded = true;
     setBookingsTab(activeBookingsTab);
@@ -192,8 +223,6 @@ function wireBookings() {
 
   const nav = document.getElementById("myBookingsNav");
   const tile = document.getElementById("myBookingsTile");
-  const ongoingTab = document.getElementById("ongoingBookingsTab");
-  const cancelledTab = document.getElementById("cancelledBookingsTab");
   const closeBtn = document.getElementById("closeCancelModal");
   const form = document.getElementById("cancelBookingForm");
 
@@ -207,8 +236,10 @@ function wireBookings() {
       }
     });
   }
-  ongoingTab.addEventListener("click", () => setBookingsTab("ongoing"));
-  cancelledTab.addEventListener("click", () => setBookingsTab("cancelled"));
+  BOOKING_TABS.forEach((name) => {
+    document.getElementById(`${name}BookingsTab`)
+      .addEventListener("click", () => setBookingsTab(name));
+  });
   closeBtn.addEventListener("click", closeCancelModal);
 
   form.addEventListener("submit", async (e) => {

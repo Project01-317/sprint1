@@ -14,6 +14,8 @@ Test credentials created here:
     customer -> aisha@air.ca      / skyhigh12   (and a few more, same password)
 """
 
+from datetime import datetime, timedelta
+
 from backend.database import SessionLocal, Flight, User, UserProfile, Reservation, init_db
 from backend.auth import hash_password
 from backend import aircraft
@@ -95,9 +97,37 @@ def seed():
         db.add(reservation)
         created += 1
 
+    # A past-dated flight + reservation so ACC-02's "Past" tab (and a past
+    # e-ticket) have data. Seeded flights are otherwise future/near-dated.
+    past_flight = db.query(Flight).filter(Flight.flight_number == "G15PAST").first()
+    if past_flight is None:
+        dep = datetime.now() - timedelta(days=6)
+        past_flight = Flight(
+            flight_number="G15PAST", airline="Group 15 Air",
+            origin="Toronto", destination="Vancouver",
+            departure_time=dep, arrival_time=dep + timedelta(hours=5),
+            price=349.0, seats_available=len(aircraft.all_seats("A320")),
+            aircraft_type="A320",
+        )
+        db.add(past_flight)
+        db.flush()
+    aisha = db.query(User).filter(User.email == "aisha@air.ca").first()
+    already_past = db.query(Reservation).filter(
+        Reservation.flight_id == past_flight.id,
+        Reservation.booking_reference == "SEEDPAST",
+    ).first()
+    if aisha and not already_past:
+        db.add(Reservation(
+            user_id=aisha.id, flight_id=past_flight.id,
+            booking_reference="SEEDPAST", seat="12A", status="CONFIRMED",
+        ))
+        past_flight.seats_available = max(0, past_flight.seats_available - 1)
+        created += 1
+
     db.commit()
     print(f"Seeded admin + {len(CUSTOMERS)} customers and {created} reservations.")
     print(f"  Flights populated: {a320.flight_number} (A320), {b787.flight_number} (B787)")
+    print(f"  Past-dated demo flight: {past_flight.flight_number} (reservation for aisha@air.ca)")
     db.close()
 
 

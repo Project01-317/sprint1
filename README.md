@@ -37,13 +37,12 @@ Legend: ✅ Done · 🟡 Partial · ⬜ Not started
 | RES-02 | Cancel Reservation | 1 | ✅ | Runs on the real reservations table; email-confirmation guard; frees the seat |
 | ADM-01 | Manage Flights | 2 | ✅ | Admin CRUD on flights, with capacity validation |
 | ADM-02 | View Passenger List | 2 | ✅ | Visual seat map + manifest; admin-only; passenger identity hidden from customers |
-| ACC-02 | View Booking History | 2 | 🟡 | "My Bookings" shows ongoing/cancelled reservations; downloadable e-tickets not implemented |
+| ACC-02 | View Booking History | 2 | ✅ | "My Bookings" split into Upcoming / Past / Cancelled (server-side); booking reference shown; downloadable PDF e-ticket per confirmed booking |
 | REP-01 | Generate Reports | 3 | ⬜ | Not started (route popularity / booking trends) |
 | SEC-01 | Secure Payments | 3 | ⬜ | Not started (payment gateway integration) |
 
-**Summary: 7 stories complete, 1 partial, 2 not started.** Remaining work is
-Sprint 3 scope — reporting/analytics (REP-01), payments (SEC-01), and finishing
-ACC-02 (e-tickets / richer history).
+**Summary: 8 stories complete, 2 not started.** Remaining work is Sprint 3
+scope — reporting/analytics (REP-01) and payments (SEC-01).
 
 ---
 
@@ -64,6 +63,11 @@ ACC-02 (e-tickets / richer history).
   appears under "My Bookings".
 - **Cancellation** — on the real reservations table; requires email confirmation;
   flips status to `CANCELLED`, frees the seat, returns a verification code.
+- **Booking history (ACC-02)** — "My Bookings" is split server-side into
+  **Upcoming / Past / Cancelled** (by the flight's departure time); each card
+  shows the booking reference and a **Download E-Ticket** button that returns a
+  boarding-pass style **PDF** (reportlab) with route, times, seat, class,
+  booking reference, and a barcode. Ownership-guarded (404 for others' tickets).
 - **Admin — Manage Flights (ADM-01)** — create/update/delete flights with
   capacity validation against confirmed reservations.
 - **Admin — Passenger List (ADM-02)** — per-flight manifest rendered as a
@@ -89,7 +93,8 @@ The project targets WCAG-style accessibility:
 
 ## Tech stack
 
-- **Backend:** Python, FastAPI, SQLAlchemy, SQLite, Argon2 (`argon2-cffi`)
+- **Backend:** Python, FastAPI, SQLAlchemy, SQLite, Argon2 (`argon2-cffi`),
+  reportlab (PDF e-tickets)
 - **Frontend:** vanilla HTML / CSS / JavaScript (served as static files)
 - **Tests:** pytest + FastAPI `TestClient`
 
@@ -163,8 +168,9 @@ database file `airline.db` is created automatically.
 | GET | `/api/me` | — | Current session / role / profile status |
 | POST | `/api/logout` | session | End session |
 | POST | `/api/bookings` | session | Book a flight (seat + reservation) |
-| GET | `/api/bookings` `/ongoing` `/cancelled` | session | Current user's reservations |
+| GET | `/api/bookings` `/ongoing` `/upcoming` `/past` `/cancelled` | session | Current user's reservations (ACC-02 history split) |
 | PUT | `/api/bookings/{id}/cancel` | session | Cancel a reservation |
+| GET | `/api/bookings/{id}/ticket` | session | Download a PDF e-ticket (owner only) |
 | GET | `/api/flights/airports` | — | Distinct origins/destinations |
 | GET | `/api/flights/search` | — | Search flights |
 | GET | `/api/flights/{id}` | — | Flight details |
@@ -181,17 +187,14 @@ pip install pytest
 pytest -q
 ```
 
-**Current status: 43 tests passing** — `test_auth.py` (10, login/registration),
-`test_bookings.py` (17, booking + cancel + RBAC + seat-map/manifest),
-`test_manage_flights.py` (16, admin CRUD + RBAC).
+**Current status: 49 tests passing** — `test_auth.py` (10, login/registration),
+`test_bookings.py` (23, booking + cancel + RBAC + seat-map/manifest + ACC-02
+history & e-ticket), `test_manage_flights.py` (16, admin CRUD + RBAC).
 
 ---
 
 ## Known issues & limitations
 
-- **ACC-02 is partial** — a user can view their ongoing/cancelled bookings under
-  "My Bookings," but downloadable e-tickets and a richer itinerary history are
-  not implemented.
 - **REP-01 (reports) and SEC-01 (payments) are not started** — planned for
   Sprint 3.
 - **No real payment step** — booking completes without payment; SEC-01 will add

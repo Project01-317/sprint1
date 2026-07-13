@@ -14,7 +14,7 @@ case is isolated.
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,16 +79,22 @@ def test_admin_login_skips_profile_setup():
 
 
 def seed_flight(flight_number="AC888", aircraft_type="A320", seats=None,
-                origin="Toronto", destination="London"):
-    """Insert a real flight and return its id."""
+                origin="Toronto", destination="London", departure=None):
+    """Insert a real flight and return its id.
+
+    `departure` (naive datetime) defaults to ~30 days out so the flight is
+    "upcoming"; pass a past datetime to exercise the ACC-02 past/history split.
+    """
     db = database.SessionLocal()
     if seats is None:
         seats = len(aircraft.all_seats(aircraft_type))
+    if departure is None:
+        departure = datetime.now() + timedelta(days=30)
     flight = database.Flight(
         flight_number=flight_number, airline="Air Canada",
         origin=origin, destination=destination,
-        departure_time=datetime(2026, 8, 1, 10, 0),
-        arrival_time=datetime(2026, 8, 1, 18, 0),
+        departure_time=departure,
+        arrival_time=departure + timedelta(hours=5),
         price=500.0, seats_available=seats, aircraft_type=aircraft_type,
     )
     db.add(flight)
@@ -303,3 +309,67 @@ def test_seatmap_hides_names_for_customer_reveals_for_admin():
     assert seat["status"] == "occupied"
     assert seat["passenger"] == "Aisha Khan"
     assert "booking_reference" in seat
+
+
+# --------------------------------------------------------------------------
+# ACC-02: booking history (upcoming / past) + PDF e-ticket
+# --------------------------------------------------------------------------
+def test_upcoming_and_past_categorisation():
+    future = seed_flight(flight_number="FUT1", departure=datetime.now() + timedelta(days=10))
+    past = seed_flight(flight_number="PAST1", departure=datetime.now() - timedelta(days=10))
+    c = login_client("hist@example.com")
+    _book(c, future, "12A")
+    _book(c, past, "12C")
+
+    upcoming = c.get("/api/bookings/upcoming").json()
+    pastlist = c.get("/api/bookings/past").json()
+    up_flights = {b["flight_number"] for b in upcoming}
+    past_flights = {b["flight_number"] for b in pastlist}
+
+    assert "FUT1" in up_flights and "FUT1" not in past_flights
+    assert "PAST1" in past_flights and "PAST1" not in up_flights
+
+
+def test_booking_payload_exposes_reference_and_seat():
+    fid = seed_flight()
+    c = login_client("payload@example.com")
+    _book(c, fid, "14C")
+    booking = c.get("/api/bookings/upcoming").json()[0]
+    assert len(booking["booking_reference"]) == 6
+    assert booking["seat"] == "14C"
+    assert booking["departure_time"] is not None
+
+
+def test_eticket_download_happy_path():
+    fid = seed_flight()
+    c = login_client("ticket@example.com")
+    bid = _book(c, fid, "12A")
+    r = c.get(f"/api/bookings/{bid}/ticket")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:4] == b"%PDF"
+    assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_eticket_requires_login():
+    fid = seed_flight()
+    owner = login_client("owner2@example.com")
+    bid = _book(owner, fid, "12A")
+    anon = TestClient(app)
+    assert anon.get(f"/api/bookings/{bid}/ticket").status_code == 401
+
+
+def test_eticket_other_users_booking_404():
+    fid = seed_flight()
+    owner = login_client("owner3@example.com")
+    bid = _book(owner, fid, "12A")
+    intruder = login_client("intruder2@example.com")
+    assert intruder.get(f"/api/bookings/{bid}/ticket").status_code == 404
+
+
+def test_eticket_cancelled_booking_400():
+    fid = seed_flight()
+    c = login_client("cancelticket@example.com")
+    bid = _book(c, fid, "12A")
+    c.put(f"/api/bookings/{bid}/cancel", json={"account_email": "cancelticket@example.com"})
+    assert c.get(f"/api/bookings/{bid}/ticket").status_code == 400

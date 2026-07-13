@@ -18,12 +18,16 @@ import string
 import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.graphics.barcode import code128
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import cast, Date
@@ -176,6 +180,7 @@ def reservation_to_booking(res: Reservation) -> dict:
         "origin": flight.origin if flight else "-",
         "destination": flight.destination if flight else "-",
         "departure_date": flight.departure_time.date().isoformat() if flight else None,
+        "departure_time": flight.departure_time.isoformat() if flight else None,
         "status": res.status,
         "cancellation_timestamp": res.cancelled_at.isoformat() if res.cancelled_at else None,
         "verification_code": f"CANCEL-BOOKING-{res.id}" if res.status == "CANCELLED" else None,
@@ -467,6 +472,38 @@ def get_cancelled_bookings(request: Request, db: Session = Depends(get_db)):
     return [reservation_to_booking(r) for r in _user_reservations(db, user.id, "CANCELLED")]
 
 
+def _reservations_by_time(db: Session, user_id: int, upcoming: bool):
+    """
+    CONFIRMED reservations split by the flight's departure vs. now. Seeded
+    departure_time values are timezone-naive, so compare with a naive now().
+    """
+    now = datetime.now()
+    q = (
+        db.query(Reservation)
+        .join(Flight, Reservation.flight_id == Flight.id)
+        .filter(Reservation.user_id == user_id, Reservation.status == "CONFIRMED")
+    )
+    if upcoming:
+        q = q.filter(Flight.departure_time >= now).order_by(Flight.departure_time.asc())
+    else:
+        q = q.filter(Flight.departure_time < now).order_by(Flight.departure_time.desc())
+    return q.all()
+
+
+@app.get("/api/bookings/upcoming")
+def get_upcoming_bookings(request: Request, db: Session = Depends(get_db)):
+    """ACC-02: confirmed bookings whose flight has not yet departed."""
+    user = current_user(request, db)
+    return [reservation_to_booking(r) for r in _reservations_by_time(db, user.id, True)]
+
+
+@app.get("/api/bookings/past")
+def get_past_bookings(request: Request, db: Session = Depends(get_db)):
+    """ACC-02: confirmed bookings whose flight has already departed."""
+    user = current_user(request, db)
+    return [reservation_to_booking(r) for r in _reservations_by_time(db, user.id, False)]
+
+
 @app.put("/api/bookings/{booking_id}/cancel")
 def cancel_booking(
     booking_id: int,
@@ -504,6 +541,78 @@ def cancel_booking(
         "booking": reservation_to_booking(reservation),
         "verification_code": verification_code,
     }
+
+
+def build_eticket_pdf(res: Reservation, flight: Flight, passenger_name: str) -> bytes:
+    """Render a boarding-pass style PDF e-ticket for a confirmed reservation."""
+    buf = BytesIO()
+    W, H = 190 * mm, 80 * mm            # boarding-pass style, landscape
+    c = canvas.Canvas(buf, pagesize=(W, H))
+
+    # Header band (navy #183251).
+    c.setFillColorRGB(0.094, 0.196, 0.318)
+    c.rect(0, H - 18 * mm, W, 18 * mm, fill=1, stroke=0)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(10 * mm, H - 12 * mm, "GROUP 15 AIR - E-TICKET / BOARDING PASS")
+
+    # Route.
+    c.setFillColorRGB(0.08, 0.15, 0.23)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(10 * mm, H - 34 * mm, f"{flight.origin}  ->  {flight.destination}")
+
+    cabin = aircraft.seat_class(flight.aircraft_type, res.seat) if res.seat else "-"
+    c.setFont("Helvetica", 11)
+    lines = [
+        f"Passenger:  {passenger_name}",
+        f"Flight:     {flight.flight_number}  ({flight.airline})",
+        f"Aircraft:   {flight.aircraft_type}",
+        f"Departs:    {flight.departure_time.strftime('%Y-%m-%d %H:%M')}",
+        f"Arrives:    {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}",
+        f"Seat:       {res.seat or 'Unassigned'}   Class: {cabin or '-'}",
+        f"Booking Ref: {res.booking_reference}",
+    ]
+    y = H - 44 * mm
+    for line in lines:
+        c.drawString(10 * mm, y, line)
+        y -= 6 * mm
+
+    # Barcode of the booking reference for an authentic look.
+    barcode = code128.Code128(res.booking_reference, barHeight=12 * mm, barWidth=0.5)
+    barcode.drawOn(c, 120 * mm, 8 * mm)
+    c.setFont("Helvetica", 8)
+    c.drawString(120 * mm, 5 * mm, res.booking_reference)
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+@app.get("/api/bookings/{booking_id}/ticket")
+def download_eticket(booking_id: int, request: Request, db: Session = Depends(get_db)):
+    """ACC-02: download a PDF e-ticket for one of the caller's confirmed bookings."""
+    user = current_user(request, db)
+    res = db.query(Reservation).filter(Reservation.id == booking_id).first()
+    # 404 (not 403) for a missing or someone else's booking, matching cancel.
+    if not res or res.user_id != user.id:
+        raise HTTPException(404, "Booking not found.")
+    if res.status != "CONFIRMED":
+        raise HTTPException(400, "E-ticket is only available for confirmed bookings.")
+
+    profile = user.profile
+    passenger_name = (
+        f"{profile.first_name} {profile.last_name}".strip()
+        if profile else user.email.split("@")[0]
+    )
+    pdf = build_eticket_pdf(res, res.flight, passenger_name)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="eticket-{res.booking_reference}.pdf"'
+        },
+    )
 
 
 # --------------------------------------------------------------------------
