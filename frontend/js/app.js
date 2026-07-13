@@ -190,6 +190,10 @@ async function showBookings() {
   const alert = document.getElementById("bookingsAlert");
   if (!section) return;
 
+  // Hide the search view so the two sections don't stack on top of each other.
+  const searchSection = document.getElementById("searchSection");
+  if (searchSection) searchSection.hidden = true;
+
   section.hidden = false;
   clearAlert(alert);
   if (!bookingsLoaded) await loadBookings();
