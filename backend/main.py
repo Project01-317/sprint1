@@ -546,20 +546,20 @@ def cancel_booking(
 def build_eticket_pdf(res: Reservation, flight: Flight, passenger_name: str) -> bytes:
     """Render a boarding-pass style PDF e-ticket for a confirmed reservation."""
     buf = BytesIO()
-    W, H = 190 * mm, 80 * mm            # boarding-pass style, landscape
+    W, H = 190 * mm, 105 * mm           # boarding-pass style, landscape
     c = canvas.Canvas(buf, pagesize=(W, H))
 
     # Header band (navy #183251).
     c.setFillColorRGB(0.094, 0.196, 0.318)
-    c.rect(0, H - 18 * mm, W, 18 * mm, fill=1, stroke=0)
+    c.rect(0, H - 20 * mm, W, 20 * mm, fill=1, stroke=0)
     c.setFillColorRGB(1, 1, 1)
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(10 * mm, H - 12 * mm, "GROUP 15 AIR - E-TICKET / BOARDING PASS")
+    c.drawString(10 * mm, H - 13 * mm, "GROUP 15 AIR - E-TICKET / BOARDING PASS")
 
     # Route.
     c.setFillColorRGB(0.08, 0.15, 0.23)
     c.setFont("Helvetica-Bold", 22)
-    c.drawString(10 * mm, H - 34 * mm, f"{flight.origin}  ->  {flight.destination}")
+    c.drawString(10 * mm, H - 36 * mm, f"{flight.origin}  ->  {flight.destination}")
 
     cabin = aircraft.seat_class(flight.aircraft_type, res.seat) if res.seat else "-"
     c.setFont("Helvetica", 11)
@@ -572,16 +572,17 @@ def build_eticket_pdf(res: Reservation, flight: Flight, passenger_name: str) -> 
         f"Seat:       {res.seat or 'Unassigned'}   Class: {cabin or '-'}",
         f"Booking Ref: {res.booking_reference}",
     ]
-    y = H - 44 * mm
+    y = H - 48 * mm
     for line in lines:
         c.drawString(10 * mm, y, line)
-        y -= 6 * mm
+        y -= 7 * mm
 
-    # Barcode of the booking reference for an authentic look.
-    barcode = code128.Code128(res.booking_reference, barHeight=12 * mm, barWidth=0.5)
-    barcode.drawOn(c, 120 * mm, 8 * mm)
+    # Barcode of the booking reference for an authentic look (bottom-right,
+    # clear of the text column and with a comfortable bottom margin).
+    barcode = code128.Code128(res.booking_reference, barHeight=14 * mm, barWidth=0.5)
+    barcode.drawOn(c, 125 * mm, 18 * mm)
     c.setFont("Helvetica", 8)
-    c.drawString(120 * mm, 5 * mm, res.booking_reference)
+    c.drawString(125 * mm, 14 * mm, res.booking_reference)
 
     c.showPage()
     c.save()
