@@ -629,18 +629,12 @@ async function confirmBooking() {
       special_accommodations: accommodations || null,
     });
 
-    // 2. Request a Stripe Checkout URL from your backend
-    const stripeResponse = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            flight_id: bookingFlight.id,
-            price: bookingFlight.price,
-            reservation_id: data.booking.id
-        })
+    // 2. Request a Stripe Checkout URL from your backend using your api() wrapper
+    const stripeData = await api("/api/create-checkout-session", {
+      flight_id: bookingFlight.id,
+      price: bookingFlight.price,
+      reservation_id: data.booking.id
     });
-
-    const stripeData = await stripeResponse.json();
 
     // 3. Redirect the user to Stripe
     if (stripeData.url) {
