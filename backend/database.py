@@ -15,9 +15,11 @@ for later sprints (bookings, payments).
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, ForeignKey, Float, create_engine
+    Column, Integer, String, DateTime, ForeignKey, Float, create_engine, text
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+
+
 
 # SQLite file lives at the project root. check_same_thread=False lets
 # FastAPI's threadpool share the connection safely for this prototype.
@@ -101,6 +103,9 @@ class Reservation(Base):
     seat = Column(String, nullable=True)
     # "CONFIRMED" (default) or "CANCELLED" — same vocabulary RES-02 already uses.
     status = Column(String, nullable=False, default="CONFIRMED")
+    # Stripe payment tracking fields added for checkout integration.
+    payment_status = Column(String, nullable=False, default="PENDING")
+    stripe_session_id = Column(String, nullable=True)
     # Optional manifest field (wheelchair, dietary, etc.) for ADM-02.
     special_accommodations = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -117,6 +122,20 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+def update_reservation_payment(reservation_id: int, stripe_session_id: str, status: str) -> None:
+    """Update payment fields for a reservation after Stripe checkout."""
+    db = SessionLocal()
+    try:
+        reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+        if reservation is None:
+            return
+        reservation.payment_status = status
+        reservation.stripe_session_id = stripe_session_id
+        db.commit()
+    finally:
+        db.close()
+
+
 def get_db():
     """FastAPI dependency: yields a session and always closes it."""
     db = SessionLocal()
@@ -124,3 +143,37 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_revenue_report():
+    db = SessionLocal()
+    try:
+        # Using raw SQL for the SQLite date functions
+        result = db.execute(text('''
+            SELECT date(created_at) as date, SUM(f.price) as daily_revenue 
+            FROM reservations r
+            JOIN flights f ON r.flight_id = f.id
+            WHERE r.payment_status = 'PENDING' OR r.payment_status = 'COMPLETED'
+            GROUP BY date(created_at)
+            ORDER BY date ASC
+        '''))
+        data = [{"date": row[0], "revenue": row[1]} for row in result]
+        return data
+    finally:
+        db.close()
+
+def get_travel_trends():
+    db = SessionLocal()
+    try:
+        result = db.execute(text('''
+            SELECT f.destination, COUNT(r.id) as total_bookings
+            FROM reservations r
+            JOIN flights f ON r.flight_id = f.id
+            GROUP BY f.destination
+            ORDER BY total_bookings DESC
+        '''))
+        data = [{"destination": row[0], "bookings": row[1]} for row in result]
+        return data
+    finally:
+        db.close()
+
+

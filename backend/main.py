@@ -454,6 +454,64 @@ def create_booking(
     )
 
 
+@app.post("/api/create-checkout-session")
+async def create_checkout_session(request: Request, db: Session = Depends(get_db)):
+    import stripe
+    from .database import update_reservation_payment
+
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    data = await request.json()
+    flight_id = data.get("flight_id")
+    price = data.get("price")
+    reservation_id = data.get("reservation_id")
+
+    if flight_id is None or price is None or reservation_id is None:
+        raise HTTPException(400, "flight_id, price, and reservation_id are required.")
+
+    try:
+        unit_amount = int(float(price) * 100)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Invalid price value.")
+
+    user = current_user(request, db)
+
+    reservation = db.query(Reservation).filter(Reservation.id == reservation_id).first()
+    if reservation is None:
+        raise HTTPException(404, "Reservation not found.")
+    if reservation.user_id != user.id:
+        raise HTTPException(403, "You can only pay for your own reservation.")
+    if reservation.flight_id != flight_id:
+        raise HTTPException(400, "Reservation does not match flight.")
+    if reservation.status != "CONFIRMED":
+        raise HTTPException(400, "Only confirmed reservations can be paid for.")
+    if reservation.payment_status == "COMPLETED":
+        raise HTTPException(400, "This reservation has already been paid.")
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"Flight Ticket (ID: {flight_id})",
+                    },
+                    "unit_amount": unit_amount,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url="http://localhost:8000/dashboard.html?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="http://localhost:8000/dashboard.html?cancel=true",
+        )
+
+        update_reservation_payment(reservation_id, session.id, "PENDING")
+
+        return JSONResponse({"url": session.url})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/bookings")
 def get_bookings(request: Request, db: Session = Depends(get_db)):
     user = current_user(request, db)
@@ -885,7 +943,17 @@ def get_seatmap(flight_id: int, request: Request, db: Session = Depends(get_db))
         "cabins": cabins,
     }
 
+from .database import get_revenue_report, get_travel_trends
 
+@app.get("/api/reports/revenue")
+def api_get_revenue(admin: User = Depends(require_admin)):
+    data = get_revenue_report()
+    return JSONResponse(data)
+
+@app.get("/api/reports/trends")
+def api_get_trends(admin: User = Depends(require_admin)):
+    data = get_travel_trends()
+    return JSONResponse(data)
 # --------------------------------------------------------------------------
 # Frontend (served last so /api routes take priority)
 # --------------------------------------------------------------------------

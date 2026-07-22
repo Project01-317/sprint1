@@ -622,22 +622,38 @@ async function confirmBooking() {
   clearAlert(alert);
   confirmBtn.disabled = true;
   try {
+    // 1. Create the reservation in your database
     const data = await api("/api/bookings", {
       flight_id: bookingFlight.id,
       seat: bookingSelectedSeat,
       special_accommodations: accommodations || null,
     });
-    // Show the confirmation step with the booking reference.
-    document.getElementById("bookingRefCode").textContent = data.booking_reference;
-    document.getElementById("bookingConfirmDetails").textContent =
-      `${bookingFlight.airline} ${bookingFlight.flight_number} · Seat ${bookingSelectedSeat} · ${bookingFlight.origin} → ${bookingFlight.destination}`;
-    document.getElementById("bookingStep").hidden = true;
-    document.getElementById("bookingConfirmation").hidden = false;
-    // Refresh the bookings list so the new reservation appears under My Bookings.
-    bookingsLoaded = false;
+
+    // 2. Request a Stripe Checkout URL from your backend
+    const stripeResponse = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            flight_id: bookingFlight.id,
+            price: bookingFlight.price,
+            reservation_id: data.booking.id
+        })
+    });
+
+    const stripeData = await stripeResponse.json();
+
+    // 3. Redirect the user to Stripe
+    if (stripeData.url) {
+        window.location.href = stripeData.url;
+    } else {
+        showAlert(alert, "Failed to initialize payment gateway.", "error");
+        confirmBtn.disabled = false;
+    }
+
   } catch (err) {
     showAlert(alert, err.message, "error");
     confirmBtn.disabled = false;
+    
     // If the seat was taken between load and confirm, reload the map to reflect it.
     if (/taken|full/i.test(err.message) && bookingFlight) {
       const mapEl = document.getElementById("bookingSeatMap");

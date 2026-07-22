@@ -312,3 +312,67 @@ async function wireManageFlights() {
 }
 
 document.addEventListener("DOMContentLoaded", wireManageFlights);
+
+let trendsDataCache = [];
+
+async function loadReports() {
+  const revenueChart = document.getElementById("revenueChart");
+  const trendsChart = document.getElementById("trendsChart");
+  if (!revenueChart && !trendsChart) return;
+
+  const revResponse = await fetch('/api/reports/revenue');
+  const revData = await revResponse.json();
+  if (revenueChart) {
+    new Chart(revenueChart, {
+      type: 'line',
+      data: {
+        labels: revData.map((row) => row.date),
+        datasets: [{
+          label: 'Daily Revenue ($)',
+          data: revData.map((row) => row.revenue),
+          borderColor: 'green',
+          fill: false,
+        }],
+      },
+    });
+  }
+
+  const trendsResponse = await fetch('/api/reports/trends');
+  trendsDataCache = await trendsResponse.json();
+  if (trendsChart) {
+    new Chart(trendsChart, {
+      type: 'bar',
+      data: {
+        labels: trendsDataCache.map((row) => row.destination),
+        datasets: [{
+          label: 'Total Bookings',
+          data: trendsDataCache.map((row) => row.bookings),
+          backgroundColor: 'blue',
+        }],
+      },
+    });
+  }
+}
+
+function exportToCSV() {
+  if (trendsDataCache.length === 0) return;
+
+  let csvContent = 'data:text/csv;charset=utf-8,Destination,Bookings\n';
+  trendsDataCache.forEach((row) => {
+    csvContent += `${row.destination},${row.bookings}\n`;
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', 'travel_trends.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadReports();
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+  if (exportCsvBtn) exportCsvBtn.addEventListener('click', exportToCSV);
+});
